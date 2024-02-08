@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+import requests
+import yaml
+import argparse
+import json
+
+def readConfig(cfile):
+    with open(cfile, mode='r') as f:
+        cdict = yaml.safe_load(f)
+    return cdict
+
+def getEthernetInterfaces(smd_url):
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+    data = r.json()
+    return data
+
+def deleteEthernetInterface(xname, smd_url):
+    smd_data = getEthernetInterfaces(smd_url)
+    for s in smd_data:
+        if s['ComponentID'] == xname:
+            print("Match found "+ xname)
+            smd_id = s['ID']
+            r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id)
+
+def ethernetInterfacePayload(smd):
+    sdata = {
+            "Description": "Interface for " + smd['name'],
+            "MACAddress": smd['mac'],
+            "IPAddresses": [
+                {
+                    "IPAddress": smd['ipaddr'],
+                    "Network": "NMN"
+                    }
+                ],
+            "ComponentID": smd['xname']
+            }
+    return sdata
+
+def nodeComponentPayload(smd):
+    sdata = {
+            "Components": [
+                {
+                    "ID": smd['xname'],
+                    "State": "Ready",
+                    "Enabled": True,
+                    "Role": "Compute",
+                    "Arch": "X86",
+                }
+            ],
+            "Force": False
+            }
+    return sdata
+
+def getBSS(bss_url):
+    r = requests.get(bss_url)
+    data = r.json()
+    return data
+
+def getSMDComponents(smd_url, xname):
+    if not xname:
+        r = requests.get(smd_url+'/State/Components')
+        data = r.json()
+    else:
+        r = requests.get(smd_url+'/State/Components/'+xname)
+        data = r.json()
+    return data
+
+def getSMDInterfaces(smd_url, xname):
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+    data = r.json()
+    if not xname:
+        return data
+    else:
+        for s in data:
+            if s['ComponentID'] == xname:
+                return s
+
+def setArgs():
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(dest='command')
+
+    smd = subparser.add_parser('smd')
+    smd.add_argument('--config', type=str)
+    smd.add_argument('--url',type=str)
+    smd.add_argument('--add-node', dest='add_node', action="store_true", default=False)
+    smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
+    smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
+    smd.add_argument('--delete-interface', dest='delete_interface', action="store_true", default=False)
+    smd.add_argument('--get-components', dest='get_components', action="store_true", default=False)
+    smd.add_argument('--get-interfaces', dest='get_interfaces', action="store_true", default=False)
+    smd.add_argument('--name',type=str)
+    smd.add_argument('--xname',type=str)
+    smd.add_argument('--mac',type=str)
+    smd.add_argument('--ipaddr',type=str)
+    bss = subparser.add_parser('bss')
+    bss.add_argument('--config',type=str)
+    bss.add_argument('--url', type=str)
+    bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
+    bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = setArgs()
+
+    if args.command == "smd":
+        smd_url = args.url
+        if args.config:
+            config = args.config
+            cdict = readConfig(config)
+            for c in cdict['nodes']:
+                nc = nodeComponentPayload(c)
+                r = requests.post(smd_url+'/State/Components', json = nc)
+                print(r.reason)
+                ei = ethernetInterfacePayload(c)
+                r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+                print(r.reason)
+        elif args.add_node:
+            nc = nodeComponentPayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
+            r = requests.post(smd_url+'/State/Components', json = nc)
+            print(r.reason)
+        elif args.delete_node:
+            r = requests.delete(smd_url+'/State/Components/'+args.xname)
+        elif args.add_interface:
+            ei = ethernetInterfacePayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
+            r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+            print(r.reason)
+        elif args.delete_interface:
+            deleteEthernetInterface(args.xname, smd_url)
+        elif args.get_components:
+            sc = getSMDComponents(smd_url, args.xname)
+            json_formatted_str = json.dumps(sc, indent=2)
+            print(json_formatted_str)
+        elif args.get_interfaces:
+            si = getSMDInterfaces(smd_url, args.xname)
+            json_formatted_str = json.dumps(si, indent=2)
+            print(json_formatted_str)
+
+
+    elif args.command == "bss":
+        config = args.config
+        bss_url = args.url
+        cdict = readConfig(config)
+        if args.add_bootparams:
+            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            print(r.reason)
+        elif args.update_bootparams:
+            r = requests.delete(bss_url+'/bootparameters', json = cdict)
+            print(r.reason)
+            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            print(r.reason)
+
+if __name__ == "__main__":
+    main()
