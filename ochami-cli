@@ -9,18 +9,24 @@ def readConfig(cfile):
         cdict = yaml.safe_load(f)
     return cdict
 
-def getEthernetInterfaces(smd_url):
-    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+def getEthernetInterfaces(smd_url, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces', headers=headers)
     data = r.json()
     return data
 
-def deleteEthernetInterface(xname, smd_url):
+def deleteEthernetInterface(xname, smd_url, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
     smd_data = getEthernetInterfaces(smd_url)
     for s in smd_data:
         if s['ComponentID'] == xname:
             print("Match found "+ xname)
             smd_id = s['ID']
-            r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id)
+            r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id, headers=headers)
 
 def ethernetInterfacePayload(smd):
     sdata = {
@@ -56,17 +62,23 @@ def getBSS(bss_url):
     data = r.json()
     return data
 
-def getSMDComponents(smd_url, xname):
+def getSMDComponents(smd_url, xname, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
     if not xname:
-        r = requests.get(smd_url+'/State/Components')
+        r = requests.get(smd_url+'/State/Components', headers=headers)
         data = r.json()
     else:
-        r = requests.get(smd_url+'/State/Components/'+xname)
+        r = requests.get(smd_url+'/State/Components/'+xname, headers=headers)
         data = r.json()
     return data
 
-def getSMDInterfaces(smd_url, xname):
-    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+def getSMDInterfaces(smd_url, xname, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces', headers=headers)
     data = r.json()
     if not xname:
         return data
@@ -77,6 +89,7 @@ def getSMDInterfaces(smd_url, xname):
 
 def setArgs():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--access-token", dest="access_token", default="", type=str)
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
@@ -102,6 +115,11 @@ def setArgs():
 
 def main():
     args = setArgs()
+    access_token = ""
+    headers = {}
+    if args.access_token:
+        access_token = args.access_token
+        headers = {"Authorization": f"Bearer {access_token}"}
 
     if args.command == "smd":
         smd_url = args.url
@@ -110,25 +128,25 @@ def main():
             cdict = readConfig(config)
             for c in cdict['nodes']:
                 nc = nodeComponentPayload(c)
-                r = requests.post(smd_url+'/State/Components', json = nc)
+                r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
                 print(r.reason)
                 ei = ethernetInterfacePayload(c)
-                r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+                r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei, headers=headers)
                 print(r.reason)
         elif args.add_node:
             nc = nodeComponentPayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
-            r = requests.post(smd_url+'/State/Components', json = nc)
+            r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
             print(r.reason)
         elif args.delete_node:
-            r = requests.delete(smd_url+'/State/Components/'+args.xname)
+            r = requests.delete(smd_url+'/State/Components/'+args.xname, headers=headers)
         elif args.add_interface:
             ei = ethernetInterfacePayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
-            r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+            r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei, headers=headers)
             print(r.reason)
         elif args.delete_interface:
             deleteEthernetInterface(args.xname, smd_url)
         elif args.get_components:
-            sc = getSMDComponents(smd_url, args.xname)
+            sc = getSMDComponents(smd_url, args.xname, access_token)
             json_formatted_str = json.dumps(sc, indent=2)
             print(json_formatted_str)
         elif args.get_interfaces:
@@ -142,13 +160,15 @@ def main():
         bss_url = args.url
         cdict = readConfig(config)
         if args.add_bootparams:
-            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            r = requests.post(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
         elif args.update_bootparams:
-            r = requests.delete(bss_url+'/bootparameters', json = cdict)
+            r = requests.delete(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
-            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            r = requests.post(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
 
 if __name__ == "__main__":
     main()
+
+# example usage: ./ochami-cli smd --config config.yml --url http://ochami-vm:27779/hsm/v2 --access-token eyJhbGciOiJSUzI1NiIsImtpZCI6IjBkZmI2MDVhLWNjOTQtNDdkZC05ZTc4LTkwNWFhMzg3MzcwNyIsInR5cCI6IkpXVCJ9.eyJhdWQiOltdLCJjbGllbnRfaWQiOiIxMzAxYWZlNS05M2Y0LTQ0OWEtYWRiMy0yNTYxODhkYjE4NDIiLCJleHAiOjE3MDk1NzQzODksImV4dCI6e30sImlhdCI6MTcwOTU3MDc4OSwiaXNzIjoiaHR0cDovLzEyNy4wLjAuMTo0NDQ0IiwianRpIjoiMmYxN2M2NDctNzcxZC00ODkyLTk1Y2ItMWUwNmUxMmE3YTFiIiwibmJmIjoxNzA5NTcwNzg5LCJzY3AiOlsicmVhZCJdLCJzdWIiOiIxMzAxYWZlNS05M2Y0LTQ0OWEtYWRiMy0yNTYxODhkYjE4NDIifQ.BdaxVOmTBrzA7fa_cfSK6hFR2khr8e-bgq5hxo6b1TvI8PbOxmUMhWWWpikWP7SCFNk37W-zj6pg1O1G1puo2KbofCcsadEJ-s3It4F-vVpWDWOi3MyOdmtsXt4TAb824JEuLK_Nad4GndwtssoFZUjpaba9ASdIoic5BIRzVAXGFDwvCmW5nC2mc-v-21sIqSE9XGGIYAygrCBhCjw52LuCwZSLYx5hCDvNloJF4uy4cM8_oWMm2agXctPtWUftWKolRcTbhXuDLclhtPxVb14aAaZK3I3t908M-UNKZ8cPuLaVawRYG4YFhy9IvjKTMil8DbITyzuJqG1P45wbacADeM55D7NoaWLkVDh5__ScbVOS-3wJL0p6G_MVwEJkhGFnIFse0k2vE2VGVocWJUvH_xUMERcz8kH6q25UR7OPN2AM6xlKUsLh3y9UDYZyMNycuWZIeu8dEiI3PhhXEMxdF3897IN7y8U-ulgjQkz_w1w_sNRROHsKTxYcbMjtWr41IVPb-cSg__TDP9fdPqARuT2tX2ldRCRrDOEHH79F-99XPhVfPjtstBUKQbq4Qm96_pf-46ePG8RfCxEpJJkmzCUL4Fq7KNR36ECfdDHk_B7cIWrpjr9tDAv1b3d0hhIZBCgaMdpDJ1LBrb-P3Eku7HR8_97niZUBfTMt4CM
