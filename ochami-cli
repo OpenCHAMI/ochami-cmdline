@@ -3,6 +3,7 @@ import requests
 import yaml
 import argparse
 import json
+import os
 
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
@@ -115,11 +116,13 @@ def setArgs():
 
 def main():
     args = setArgs()
-    access_token = ""
     headers = {}
+    access_token = ""
+    if os.getenv("OCHAMI_ACCESS_TOKEN"):
+        access_token = os.getenv(f"{os.getenv('OCHAMI_ACCESS_TOKEN')}")
+        headers = {"Authorization": f"Bearer {os.getenv('OCHAMI_ACCESS_TOKEN')}"}
     if args.access_token:
-        access_token = args.access_token
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {args.access_token}"}
 
     if args.command == "smd":
         smd_url = args.url
@@ -171,4 +174,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# example usage: ./ochami-cli smd --config config.yml --url http://ochami-vm:27779/hsm/v2 --access-token eyJhbGciOiJSUzI1NiIsImtpZCI6IjBkZmI2MDVhLWNjOTQtNDdkZC05ZTc4LTkwNWFhMzg3MzcwNyIsInR5cCI6IkpXVCJ9.eyJhdWQiOltdLCJjbGllbnRfaWQiOiIxMzAxYWZlNS05M2Y0LTQ0OWEtYWRiMy0yNTYxODhkYjE4NDIiLCJleHAiOjE3MDk1NzQzODksImV4dCI6e30sImlhdCI6MTcwOTU3MDc4OSwiaXNzIjoiaHR0cDovLzEyNy4wLjAuMTo0NDQ0IiwianRpIjoiMmYxN2M2NDctNzcxZC00ODkyLTk1Y2ItMWUwNmUxMmE3YTFiIiwibmJmIjoxNzA5NTcwNzg5LCJzY3AiOlsicmVhZCJdLCJzdWIiOiIxMzAxYWZlNS05M2Y0LTQ0OWEtYWRiMy0yNTYxODhkYjE4NDIifQ.BdaxVOmTBrzA7fa_cfSK6hFR2khr8e-bgq5hxo6b1TvI8PbOxmUMhWWWpikWP7SCFNk37W-zj6pg1O1G1puo2KbofCcsadEJ-s3It4F-vVpWDWOi3MyOdmtsXt4TAb824JEuLK_Nad4GndwtssoFZUjpaba9ASdIoic5BIRzVAXGFDwvCmW5nC2mc-v-21sIqSE9XGGIYAygrCBhCjw52LuCwZSLYx5hCDvNloJF4uy4cM8_oWMm2agXctPtWUftWKolRcTbhXuDLclhtPxVb14aAaZK3I3t908M-UNKZ8cPuLaVawRYG4YFhy9IvjKTMil8DbITyzuJqG1P45wbacADeM55D7NoaWLkVDh5__ScbVOS-3wJL0p6G_MVwEJkhGFnIFse0k2vE2VGVocWJUvH_xUMERcz8kH6q25UR7OPN2AM6xlKUsLh3y9UDYZyMNycuWZIeu8dEiI3PhhXEMxdF3897IN7y8U-ulgjQkz_w1w_sNRROHsKTxYcbMjtWr41IVPb-cSg__TDP9fdPqARuT2tX2ldRCRrDOEHH79F-99XPhVfPjtstBUKQbq4Qm96_pf-46ePG8RfCxEpJJkmzCUL4Fq7KNR36ECfdDHk_B7cIWrpjr9tDAv1b3d0hhIZBCgaMdpDJ1LBrb-P3Eku7HR8_97niZUBfTMt4CM
+# example usage: ./ochami-cli smd --config config.yml --url http://127.0.0.1:27779/hsm/v2
