@@ -4,6 +4,13 @@ import yaml
 import argparse
 import json
 import os
+import webbrowser
+import urllib
+import base64
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+access_token = ""
 
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
@@ -88,9 +95,67 @@ def getSMDInterfaces(smd_url, xname, access_token=""):
             if s['ComponentID'] == xname:
                 return s
 
+class AccessTokenHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.receive_token()
+
+    def receive_token(self):
+        # length = int(self.headers.get('content-length'))
+        # field_data = self.rfile.read(length)
+        # fields = urllib.parse.parse_qs(str(field_data,"UTF-8"))
+        if self.headers.get("access_token"):
+            global access_token
+            access_token = self.headers.get('access_token')
+            with open(".ochami-token", "w+") as f:
+                f.write(access_token)
+            print(f"token received: {access_token}")
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+
+def login(url: str, host: str, port: int) -> str:
+    # open browser and wait for access code if target is set
+    if host:
+        url += f"?target={urllib.parse.quote_plus(f'http://{host}:{port}')}"
+    is_open = webbrowser.open(url)
+    if is_open:
+        print(f"waiting to receive an access token...")
+        if host:
+            try:
+                httpd = HTTPServer((host, port), AccessTokenHandler)
+                while not access_token:
+                    httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("shutting down without receiving token")
+                httpd.shutdown()
+
+def is_access_token_valid(token: str) -> bool:
+    # NOTE: doing validation manually even though PyJwt can do this as well
+    # no token is automatically invalid
+    if not token:
+        return False
+    
+    # base64 decode the token into its 3 segments
+    segments = token.split(".", 3)
+    decoded_segments = []
+    for segment in segments:
+        padded = segment + "="*divmod(len(segment),4)[1]
+        decoded_segments.append(base64.urlsafe_b64decode(padded))
+    
+    # check payload for expiration date (token is valid if it doesn't exist)
+    if len(decoded_segments) >= 2:
+        payload = json.loads(decoded_segments[1])
+        expires_at = payload["exp"]
+        if expires_at:
+            current_time = time.time()
+            return current_time < expires_at
+    else:
+        return False
+
 def setArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument("--access-token", dest="access_token", default="", type=str)
+    parser.add_argument("--access-token-file", dest="access_token_file", default=".ochami-token", type=str)
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
@@ -111,18 +176,30 @@ def setArgs():
     bss.add_argument('--url', type=str)
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
+    login = subparser.add_parser('login')
+    login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
+    login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
+    login.add_argument("--target-port", dest='port', type=int, default=5000, help="set the target port receive access token")
     args = parser.parse_args()
     return args
 
 def main():
+    global access_token
     args = setArgs()
     headers = {}
-    access_token = ""
     if os.getenv("OCHAMI_ACCESS_TOKEN"):
         access_token = os.getenv(f"{os.getenv('OCHAMI_ACCESS_TOKEN')}")
         headers = {"Authorization": f"Bearer {os.getenv('OCHAMI_ACCESS_TOKEN')}"}
     if args.access_token:
-        headers = {"Authorization": f"Bearer {args.access_token}"}
+        access_token = args.access_token
+        if access_token:
+            headers = {"Authorization": f"Bearer {args.access_token}"}
+    elif args.access_token_file:
+        if os.path.exists(args.access_token_file):
+            with open(args.access_token_file, "r") as f:
+                access_token = f.read()
+                if access_token:
+                    headers = {"Authorization": f"Bearer {access_token}"}
 
     if args.command == "smd":
         smd_url = args.url
@@ -170,6 +247,17 @@ def main():
             print(r.reason)
             r = requests.post(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
+    
+    elif args.command == "login":
+        url = args.url
+        host = args.host
+        port = args.port
+        # todo: only try to log in if we have an invalid token
+        if not is_access_token_valid(access_token):
+            login(url, host, port)
+        else:
+            print("found a valid token")
+
 
 if __name__ == "__main__":
     main()
