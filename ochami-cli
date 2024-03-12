@@ -114,6 +114,7 @@ class AccessTokenHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 def login(url: str, host: str, port: int) -> str:
+    global access_token
     # open browser and wait for access code if target is set
     if host:
         url += f"?target={urllib.parse.quote_plus(f'http://{host}:{port}')}"
@@ -133,6 +134,7 @@ def is_access_token_valid(token: str) -> bool:
     # NOTE: doing validation manually even though PyJwt can do this as well
     # no token is automatically invalid
     if not token:
+        print("no token found")
         return False
     
     # base64 decode the token into its 3 segments
@@ -150,6 +152,7 @@ def is_access_token_valid(token: str) -> bool:
             current_time = time.time()
             return current_time < expires_at
     else:
+        print("could not validate token")
         return False
 
 def setArgs():
@@ -254,6 +257,7 @@ def main():
         port = args.port
         # todo: only try to log in if we have an invalid token
         if not is_access_token_valid(access_token):
+            access_token = ""
             login(url, host, port)
         else:
             print("found a valid token")
