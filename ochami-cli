@@ -3,24 +3,38 @@ import requests
 import yaml
 import argparse
 import json
+import os
+import webbrowser
+import urllib
+import base64
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+access_token = ""
 
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
         cdict = yaml.safe_load(f)
     return cdict
 
-def getEthernetInterfaces(smd_url):
-    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+def getEthernetInterfaces(smd_url, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces', headers=headers)
     data = r.json()
     return data
 
-def deleteEthernetInterface(xname, smd_url):
+def deleteEthernetInterface(xname, smd_url, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
     smd_data = getEthernetInterfaces(smd_url)
     for s in smd_data:
         if s['ComponentID'] == xname:
             print("Match found "+ xname)
             smd_id = s['ID']
-            r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id)
+            r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id, headers=headers)
 
 def ethernetInterfacePayload(smd):
     sdata = {
@@ -56,17 +70,23 @@ def getBSS(bss_url):
     data = r.json()
     return data
 
-def getSMDComponents(smd_url, xname):
+def getSMDComponents(smd_url, xname, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
     if not xname:
-        r = requests.get(smd_url+'/State/Components')
+        r = requests.get(smd_url+'/State/Components', headers=headers)
         data = r.json()
     else:
-        r = requests.get(smd_url+'/State/Components/'+xname)
+        r = requests.get(smd_url+'/State/Components/'+xname, headers=headers)
         data = r.json()
     return data
 
-def getSMDInterfaces(smd_url, xname):
-    r = requests.get(smd_url+'/Inventory/EthernetInterfaces')
+def getSMDInterfaces(smd_url, xname, access_token=""):
+    headers = {}
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(smd_url+'/Inventory/EthernetInterfaces', headers=headers)
     data = r.json()
     if not xname:
         return data
@@ -75,8 +95,70 @@ def getSMDInterfaces(smd_url, xname):
             if s['ComponentID'] == xname:
                 return s
 
+class AccessTokenHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.receive_token()
+
+    def receive_token(self):
+        # length = int(self.headers.get('content-length'))
+        # field_data = self.rfile.read(length)
+        # fields = urllib.parse.parse_qs(str(field_data,"UTF-8"))
+        if self.headers.get("access_token"):
+            global access_token
+            access_token = self.headers.get('access_token')
+            with open(".ochami-token", "w+") as f:
+                f.write(access_token)
+            print(f"token received: {access_token}")
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+
+def login(url: str, host: str, port: int) -> str:
+    global access_token
+    # open browser and wait for access code if target is set
+    if host:
+        url += f"?target={urllib.parse.quote_plus(f'http://{host}:{port}')}"
+    is_open = webbrowser.open(url)
+    if is_open:
+        print(f"waiting to receive an access token...")
+        if host:
+            try:
+                httpd = HTTPServer((host, port), AccessTokenHandler)
+                while not access_token:
+                    httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("shutting down without receiving token")
+                httpd.shutdown()
+
+def is_access_token_valid(token: str) -> bool:
+    # NOTE: doing validation manually even though PyJwt can do this as well
+    # no token is automatically invalid
+    if not token:
+        print("no token found")
+        return False
+    
+    # base64 decode the token into its 3 segments
+    segments = token.split(".", 3)
+    decoded_segments = []
+    for segment in segments:
+        padded = segment + "="*divmod(len(segment),4)[1]
+        decoded_segments.append(base64.urlsafe_b64decode(padded))
+    
+    # check payload for expiration date (token is valid if it doesn't exist)
+    if len(decoded_segments) >= 2:
+        payload = json.loads(decoded_segments[1])
+        expires_at = payload["exp"]
+        if expires_at:
+            current_time = time.time()
+            return current_time < expires_at
+    else:
+        print("could not validate token")
+        return False
+
 def setArgs():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--access-token", dest="access_token", default="", type=str)
+    parser.add_argument("--access-token-file", dest="access_token_file", default=".ochami-token", type=str)
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
@@ -97,11 +179,30 @@ def setArgs():
     bss.add_argument('--url', type=str)
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
+    login = subparser.add_parser('login')
+    login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
+    login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
+    login.add_argument("--target-port", dest='port', type=int, default=5000, help="set the target port receive access token")
     args = parser.parse_args()
     return args
 
 def main():
+    global access_token
     args = setArgs()
+    headers = {}
+    if os.getenv("OCHAMI_ACCESS_TOKEN"):
+        access_token = os.getenv(f"{os.getenv('OCHAMI_ACCESS_TOKEN')}")
+        headers = {"Authorization": f"Bearer {os.getenv('OCHAMI_ACCESS_TOKEN')}"}
+    if args.access_token:
+        access_token = args.access_token
+        if access_token:
+            headers = {"Authorization": f"Bearer {args.access_token}"}
+    elif args.access_token_file:
+        if os.path.exists(args.access_token_file):
+            with open(args.access_token_file, "r") as f:
+                access_token = f.read()
+                if access_token:
+                    headers = {"Authorization": f"Bearer {access_token}"}
 
     if args.command == "smd":
         smd_url = args.url
@@ -110,25 +211,25 @@ def main():
             cdict = readConfig(config)
             for c in cdict['nodes']:
                 nc = nodeComponentPayload(c)
-                r = requests.post(smd_url+'/State/Components', json = nc)
+                r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
                 print(r.reason)
                 ei = ethernetInterfacePayload(c)
-                r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+                r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei, headers=headers)
                 print(r.reason)
         elif args.add_node:
             nc = nodeComponentPayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
-            r = requests.post(smd_url+'/State/Components', json = nc)
+            r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
             print(r.reason)
         elif args.delete_node:
-            r = requests.delete(smd_url+'/State/Components/'+args.xname)
+            r = requests.delete(smd_url+'/State/Components/'+args.xname, headers=headers)
         elif args.add_interface:
             ei = ethernetInterfacePayload({'name': args.name,'xname': args.xname,'mac': args.mac, 'ipaddr': args.ipaddr})
-            r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei)
+            r = requests.post(smd_url+'/Inventory/EthernetInterfaces', json = ei, headers=headers)
             print(r.reason)
         elif args.delete_interface:
             deleteEthernetInterface(args.xname, smd_url)
         elif args.get_components:
-            sc = getSMDComponents(smd_url, args.xname)
+            sc = getSMDComponents(smd_url, args.xname, access_token)
             json_formatted_str = json.dumps(sc, indent=2)
             print(json_formatted_str)
         elif args.get_interfaces:
@@ -142,13 +243,27 @@ def main():
         bss_url = args.url
         cdict = readConfig(config)
         if args.add_bootparams:
-            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            r = requests.post(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
         elif args.update_bootparams:
-            r = requests.delete(bss_url+'/bootparameters', json = cdict)
+            r = requests.delete(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
-            r = requests.post(bss_url+'/bootparameters', json = cdict)
+            r = requests.post(bss_url+'/bootparameters', json = cdict, headers=headers)
             print(r.reason)
+    
+    elif args.command == "login":
+        url = args.url
+        host = args.host
+        port = args.port
+        # todo: only try to log in if we have an invalid token
+        if not is_access_token_valid(access_token):
+            access_token = ""
+            login(url, host, port)
+        else:
+            print("found a valid token")
+
 
 if __name__ == "__main__":
     main()
+
+# example usage: ./ochami-cli smd --config config.yml --url http://127.0.0.1:27779/hsm/v2
