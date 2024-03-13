@@ -8,9 +8,11 @@ import webbrowser
 import urllib
 import base64
 import time
+import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 access_token = ""
+server = None
 
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
@@ -105,6 +107,7 @@ class AccessTokenHandler(BaseHTTPRequestHandler):
         # fields = urllib.parse.parse_qs(str(field_data,"UTF-8"))
         if self.headers.get("access_token"):
             global access_token
+            global server
             access_token = self.headers.get('access_token')
             with open(".ochami-token", "w+") as f:
                 f.write(access_token)
@@ -112,9 +115,11 @@ class AccessTokenHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
+            threading.Thread(target=server.shutdown, daemon=True).start()
 
 def login(url: str, host: str, port: int) -> str:
     global access_token
+    global server
     # open browser and wait for access code if target is set
     if host:
         url += f"?target={urllib.parse.quote_plus(f'http://{host}:{port}')}"
@@ -123,12 +128,12 @@ def login(url: str, host: str, port: int) -> str:
         print(f"waiting to receive an access token...")
         if host:
             try:
-                httpd = HTTPServer((host, port), AccessTokenHandler)
+                server = HTTPServer((host, port), AccessTokenHandler)
                 while not access_token:
-                    httpd.serve_forever()
+                    server.serve_forever()
             except KeyboardInterrupt:
                 print("shutting down without receiving token")
-                httpd.shutdown()
+                server.shutdown()
 
 def is_access_token_valid(token: str) -> bool:
     # NOTE: doing validation manually even though PyJwt can do this as well
