@@ -19,7 +19,7 @@ def readConfig(cfile):
         cdict = yaml.safe_load(f)
     return cdict
 
-def makeRequest(url, r_type, headers, jdata=""):
+def makeRequest(url, r_type, headers, jdata=None):
     if r_type is "get":
         r = requests.get(url, json = jdata, headers=headers)
     elif r_type is "post":
@@ -31,11 +31,10 @@ def makeRequest(url, r_type, headers, jdata=""):
 
     # Make this more informative when things break...
     r.raise_for_status()
-    if r.json():
+    if r.content:
         return r.json()
     else:
         return {}
-
 
 def nodeComponentPayload(smd):
     sdata = {
@@ -128,7 +127,7 @@ def deleteEthernetInterface(smd_url, headers, xname):
 
 def addRedfishEndpoint(smd_url, headers, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
-    makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', t_type='post', headers=headers, jdata=re)
+    makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, jdata=re)
 
 def getSMDComponents(smd_url, headers, xname):
     if not xname:
@@ -150,17 +149,19 @@ def getSMDInterfaces(smd_url, headers, xname):
 
 
 ############# BSS #############
-def getBSS(bss_url):
-    r = requests.get(bss_url)
-    data = r.json()
+def getBSS(bss_url, headers):
+    data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers)
     return data
 
-def addBootParams(bss_url, bss_data):
+def addBootParams(bss_url, headers, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers)
 
-def updateBootParams():
+def updateBootParams(bss_url, headers, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers)
     makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers)
+
+def deleteBootParams(bss_url, headers, bss_data):
+    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers)
 ############# BSS #############
 
 ############# AUTH ############
@@ -239,6 +240,7 @@ def setArgs():
     smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
     smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
     smd.add_argument('--delete-interface', dest='delete_interface', action="store_true", default=False)
+    smd.add_argument('--add-rf-endpoint', dest='add_rf_endpoint', action="store_true", default=False)
     smd.add_argument('--get-components', dest='get_components', action="store_true", default=False)
     smd.add_argument('--get-interfaces', dest='get_interfaces', action="store_true", default=False)
     smd.add_argument('--fake-discovery', dest='fake_discovery', action="store_true", default=False)
@@ -246,12 +248,15 @@ def setArgs():
     smd.add_argument('--xname',type=str)
     smd.add_argument('--mac',type=str)
     smd.add_argument('--ipaddr',type=str)
+    smd.add_argument('--bmc-ipaddr',dest="bmc_ipaddr",type=str)
     smd.add_argument('--nid',type=str)
     bss = subparser.add_parser('bss')
     bss.add_argument('--config',type=str)
     bss.add_argument('--url', type=str)
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
+    bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
+    bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
@@ -286,8 +291,9 @@ def main():
             config = args.config
             cdict = readConfig(config)
             for c in cdict['nodes']:
-                if args.fake_disovery:
-                    addRedfishEndpoint(smd_url, headers, c['xname'], c['name'], c['mac'], c['bmc_ipaddr'])
+                if args.fake_discovery:
+                    print(c)
+                    addRedfishEndpoint(smd_url, headers, c['name'], c['xname'], c['mac'], c['bmc_ipaddr'])
                 addNode(smd_url, headers, c['xname'], c['nid'])
                 addInterface(smd_url, headers, c['name'], c['xname'], c['mac'], c['ipaddr'])
         elif args.add_node:
@@ -298,6 +304,8 @@ def main():
             addInterface(smd_url, headers, args.name, args.xname, args.mac, args.ipaddr)
         elif args.delete_interface:
             deleteEthernetInterface(smd_url, headers, args.xname)
+        elif args.add_rf_endpoint:
+            addRedfishEndpoint(smd_url, headers, args.name, args.xname, args.mac, args.bmc_ipaddr)
         elif args.get_components:
             sc = getSMDComponents(smd_url, headers, args.xname)
             json_formatted_str = json.dumps(sc, indent=2)
@@ -316,9 +324,15 @@ def main():
             bss_url = args.url
         bss_dict = readConfig(config)
         if args.add_bootparams:
-            addBootParams(bss_url, bss_dict)
+            addBootParams(bss_url, headers, bss_dict)
         elif args.update_bootparams:
-            updateBootParams(bss_url, bss_dict)
+            updateBootParams(bss_url, headers, bss_dict)
+        elif args.delete_bootparams:
+            deleteBootParams(bss_url, headers, bss_dict)
+        elif args.get_bootparams:
+            bss = getBSS(bss_url, headers)
+            json_formatted_str = json.dumps(bss, indent=2)
+            print(json_formatted_str)
     
     elif args.command == "login":
         url = args.url
