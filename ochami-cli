@@ -9,11 +9,7 @@ import urllib
 import uuid
 import base64
 import time
-import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
-
-urllib3_logger = logging.getLogger('urllib')
-urllib3_logger.setLevel(logging.CRITICAL)
 
 access_token = ""
 
