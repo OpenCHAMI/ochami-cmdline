@@ -12,6 +12,7 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 access_token = ""
+cacert=True
 
 ############# UTIL ############
 def readConfig(cfile):
@@ -19,13 +20,13 @@ def readConfig(cfile):
         cdict = yaml.safe_load(f)
     return cdict
 
-def makeRequest(url, r_type, headers, jdata=None):
+def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
     if r_type is "get":
-        r = requests.get(url, json = jdata, headers=headers)
+        r = requests.get(url, json = jdata, headers=headers, verify=cert)
     elif r_type is "post":
-        r = requests.post(url, json = jdata, headers=headers)
+        r = requests.post(url, json = jdata, headers=headers, verify=cert)
     elif r_type is "delete":
-        r = requests.delete(url, json = jdata, headers=headers)
+        r = requests.delete(url, json = jdata, headers=headers, verify=cert)
     else:
         print("unrecognized request type: ", r_type)
 
@@ -231,6 +232,7 @@ def setArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument("--access-token", dest="access_token", default="", type=str)
     parser.add_argument("--access-token-file", dest="access_token_file", default=".ochami-token", type=str)
+    parser.add_argument("--ca-cert", dest="ca_cert", type=str, default="", help="set path for CA certificate")
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
@@ -266,8 +268,11 @@ def setArgs():
 
 def main():
     global access_token
+    global cacert
     args = setArgs()
     headers = {}
+
+    # do access token stuff
     if os.getenv("OCHAMI_ACCESS_TOKEN"):
         access_token = os.getenv(f"{os.getenv('OCHAMI_ACCESS_TOKEN')}")
         headers = {"Authorization": f"Bearer {os.getenv('OCHAMI_ACCESS_TOKEN')}"}
@@ -281,6 +286,9 @@ def main():
                 access_token = f.read()
                 if access_token:
                     headers = {"Authorization": f"Bearer {access_token}"}
+    
+    # set CA cert var
+    cacert=args.ca_cert
 
     if args.command == "smd":
         if os.getenv("SMD_URL"):
