@@ -210,6 +210,7 @@ def setArgs():
     smd.add_argument('--delete-interface', dest='delete_interface', action="store_true", default=False)
     smd.add_argument('--get-components', dest='get_components', action="store_true", default=False)
     smd.add_argument('--get-interfaces', dest='get_interfaces', action="store_true", default=False)
+    smd.add_argument('--fake-discovery', dest='fake_discovery', action="store_true", default=False)
     smd.add_argument('--name',type=str)
     smd.add_argument('--xname',type=str)
     smd.add_argument('--mac',type=str)
@@ -250,9 +251,10 @@ def main():
             config = args.config
             cdict = readConfig(config)
             for c in cdict['nodes']:
-                re = redfishEndpointPayload(c)
-                r = requests.post(smd_url+'/Inventory/RedfishEndpoints',json = re, headers=headers)
-                print(r.reason)
+                if args.fake_disovery:
+                    re = redfishEndpointPayload(c)
+                    r = requests.post(smd_url+'/Inventory/RedfishEndpoints',json = re, headers=headers)
+                    print(r.reason)
                 nc = nodeComponentPayload(c)
                 r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
                 print(r.reason)
