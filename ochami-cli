@@ -38,6 +38,46 @@ def deleteEthernetInterface(xname, smd_url, access_token=""):
             smd_id = s['ID']
             r = requests.delete(smd_url+'/Inventory/EthernetInterfaces/'+smd_id, headers=headers)
 
+def redfishEndpointPayload(smd):
+    sdata = {
+                "ID": smd['xname'].replace('n0',''),
+                "Name": smd['name'],
+                "Hostname": smd['name'],
+                "Domain": "",
+                "FQDN": smd['name'],
+                "Enabled": True,
+                "User": "root",
+                "Password": "",
+                "MacRequired": True,
+                "IPAddress": smd['bmc_ipaddr'],
+                "RediscoverOnUpdate": False,
+                "Systems": [
+                    {
+                        "Data": {
+                            "@odata.id": "/redfish/v1/Systems/Self",
+                            "Id": "Self",
+                            "Description": "System Self",
+                            "Name": "System",
+                            "Status": {
+                                "State": "Enabled"
+                            },
+                            "SystemType": "Physical",
+                            "UUID": str(uuid.uuid4())
+                        },
+                        "EthernetInterfaces": [
+                            {
+                                "@odata.id": "/redfish/v1/Systems/Self/EthernetInterfaces/"+smd['name'],
+                                "Id": smd['name'],
+                                "InterfaceEnabled": True,
+                                "MACAddress": smd['mac'],
+                                "Description": ""
+                            }
+                        ]
+                    }
+                ]
+            }
+    return sdata
+
 def ethernetInterfacePayload(smd):
     sdata = {
             "Description": "Interface for " + smd['name'],
@@ -175,6 +215,7 @@ def setArgs():
     smd.add_argument('--delete-interface', dest='delete_interface', action="store_true", default=False)
     smd.add_argument('--get-components', dest='get_components', action="store_true", default=False)
     smd.add_argument('--get-interfaces', dest='get_interfaces', action="store_true", default=False)
+    smd.add_argument('--fake-discovery', dest='fake_discovery', action="store_true", default=False)
     smd.add_argument('--name',type=str)
     smd.add_argument('--xname',type=str)
     smd.add_argument('--mac',type=str)
@@ -215,6 +256,10 @@ def main():
             config = args.config
             cdict = readConfig(config)
             for c in cdict['nodes']:
+                if args.fake_disovery:
+                    re = redfishEndpointPayload(c)
+                    r = requests.post(smd_url+'/Inventory/RedfishEndpoints',json = re, headers=headers)
+                    print(r.reason)
                 nc = nodeComponentPayload(c)
                 r = requests.post(smd_url+'/State/Components', json = nc, headers=headers)
                 print(r.reason)
