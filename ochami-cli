@@ -20,6 +20,7 @@ def readConfig(cfile):
         cdict = yaml.safe_load(f)
     return cdict
 
+
 def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
     if r_type is "get":
         r = requests.get(url, json = jdata, headers=headers, verify=cert)
@@ -27,6 +28,7 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
     elif r_type is "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
+
     else:
         print("unrecognized request type: ", r_type)
 
@@ -301,9 +303,18 @@ def main():
             for c in cdict['nodes']:
                 if args.fake_discovery:
                     print(c)
-                    addRedfishEndpoint(smd_url, headers, c['name'], c['xname'], c['mac'], c['bmc_ipaddr'])
-                addNode(smd_url, headers, c['xname'], c['nid'])
-                addInterface(smd_url, headers, c['name'], c['xname'], c['mac'], c['ipaddr'])
+                    try:
+                        addRedfishEndpoint(smd_url, headers, c['name'], c['xname'], c['mac'], c['bmc_ipaddr'])
+                    except Exception as e:
+                        print(e)
+                try:
+                    addNode(smd_url, headers, c['xname'], c['nid'])
+                except Exception as e:
+                    print(e)
+                try:
+                    addInterface(smd_url, headers, c['name'], c['xname'], c['mac'], c['ipaddr'])
+                except Exception as e:
+                    print(e)
         elif args.add_node:
             addNode(smd_url, headers, args.xname, args.nid)
         elif args.delete_node:
