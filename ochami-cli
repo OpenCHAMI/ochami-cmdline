@@ -112,35 +112,35 @@ def redfishEndpointPayload(smd):
 
 
 ############# SMD #############
-def addNode(smd_url, headers, xname, nid):
+def addNode(smd_url, headers, cert, xname, nid):
     nc = nodeComponentPayload({'xname': xname, 'nid': nid})
-    makeRequest(smd_url+'/State/Components', 'post', headers, nc)
+    makeRequest(smd_url+'/State/Components', 'post', headers=headers, cert=cert, jdata=nc)
 
-def deleteNode(smd_url, headers, xname):
-    makeRequest(url=smd_url+'/State/Components/'+xname, r_type='delete', headers=headers)
+def deleteNode(smd_url, headers, cert, xname):
+    makeRequest(url=smd_url+'/State/Components/'+xname, r_type='delete', headers=headers, cert=cert)
 
-def addInterface(smd_url, headers, name, xname, mac, ipaddr):
+def addInterface(smd_url, headers, cert, name, xname, mac, ipaddr):
     ei = ethernetInterfacePayload({'name': name,'xname': xname,'mac': mac, 'ipaddr': ipaddr})
-    makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='post', jdata=ei, headers=headers)
+    makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='post', jdata=ei, headers=headers, cert=cert)
 
-def deleteEthernetInterface(smd_url, headers, xname):
-    smd_data = getSMDInterfaces(smd_url, headers, xname)
+def deleteEthernetInterface(smd_url, headers, cert, xname):
+    smd_data = getSMDInterfaces(smd_url, headers, cert, xname)
     if smd_data:
-        makeRequest(url=smd_url+'/Inventory/EthernetInterfaces/'+smd_data['ID'], r_type='delete', headers=headers)
+        makeRequest(url=smd_url+'/Inventory/EthernetInterfaces/'+smd_data['ID'], r_type='delete', headers=headers, cert=cert)
 
-def addRedfishEndpoint(smd_url, headers, name, xname, mac, bmc_ipaddr):
+def addRedfishEndpoint(smd_url, headers, cert, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
-    makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, jdata=re)
+    makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, cert=cert, jdata=re)
 
-def getSMDComponents(smd_url, headers, xname):
+def getSMDComponents(smd_url, headers, cert, xname):
     if not xname:
-        data = makeRequest(url=smd_url+'/State/Components', r_type='get', headers=headers)
+        data = makeRequest(url=smd_url+'/State/Components', r_type='get', headers=headers, cert=cert)
     else:
-        data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers)
+        data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers, cert=cert)
     return data
 
-def getSMDInterfaces(smd_url, headers, xname):
-    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers)
+def getSMDInterfaces(smd_url, headers, cert, xname):
+    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
     if not xname:
         return data
     else:
@@ -152,19 +152,19 @@ def getSMDInterfaces(smd_url, headers, xname):
 
 
 ############# BSS #############
-def getBSS(bss_url, headers):
-    data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers)
+def getBSS(bss_url, headers, cert):
+    data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers, cert=cert)
     return data
 
-def addBootParams(bss_url, headers, bss_data):
-    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers)
+def addBootParams(bss_url, headers, cert, bss_data):
+    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
 
-def updateBootParams(bss_url, headers, bss_data):
-    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers)
-    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers)
+def updateBootParams(bss_url, headers, cert, bss_data):
+    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
+    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
 
-def deleteBootParams(bss_url, headers, bss_data):
-    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers)
+def deleteBootParams(bss_url, headers, cert, bss_data):
+    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
 ############# BSS #############
 
 ############# AUTH ############
@@ -304,33 +304,33 @@ def main():
                 if args.fake_discovery:
                     print(c)
                     try:
-                        addRedfishEndpoint(smd_url, headers, c['name'], c['xname'], c['mac'], c['bmc_ipaddr'])
+                        addRedfishEndpoint(smd_url, headers, cacert, c['name'], c['xname'], c['mac'], c['bmc_ipaddr'])
                     except Exception as e:
                         print(e)
                 try:
-                    addNode(smd_url, headers, c['xname'], c['nid'])
+                    addNode(smd_url, headers, cacert, c['xname'], c['nid'])
                 except Exception as e:
                     print(e)
                 try:
-                    addInterface(smd_url, headers, c['name'], c['xname'], c['mac'], c['ipaddr'])
+                    addInterface(smd_url, headers, cacert, c['name'], c['xname'], c['mac'], c['ipaddr'])
                 except Exception as e:
                     print(e)
         elif args.add_node:
-            addNode(smd_url, headers, args.xname, args.nid)
+            addNode(smd_url, headers, cacert, args.xname, args.nid)
         elif args.delete_node:
-            deleteNode(smd_url, headers, args.xname)
+            deleteNode(smd_url, headers, cacert, args.xname)
         elif args.add_interface:
-            addInterface(smd_url, headers, args.name, args.xname, args.mac, args.ipaddr)
+            addInterface(smd_url, headers, cacert, args.name, args.xname, args.mac, args.ipaddr)
         elif args.delete_interface:
-            deleteEthernetInterface(smd_url, headers, args.xname)
+            deleteEthernetInterface(smd_url, headers, cacert, args.xname)
         elif args.add_rf_endpoint:
-            addRedfishEndpoint(smd_url, headers, args.name, args.xname, args.mac, args.bmc_ipaddr)
+            addRedfishEndpoint(smd_url, headers, cacert, args.name, args.xname, args.mac, args.bmc_ipaddr)
         elif args.get_components:
-            sc = getSMDComponents(smd_url, headers, args.xname)
+            sc = getSMDComponents(smd_url, headers, cacert, args.xname)
             json_formatted_str = json.dumps(sc, indent=2)
             print(json_formatted_str)
         elif args.get_interfaces:
-            si = getSMDInterfaces(smd_url, headers, args.xname)
+            si = getSMDInterfaces(smd_url, headers, cacert, args.xname)
             json_formatted_str = json.dumps(si, indent=2)
             print(json_formatted_str)
 
@@ -343,13 +343,13 @@ def main():
             bss_url = args.url
         bss_dict = readConfig(config)
         if args.add_bootparams:
-            addBootParams(bss_url, headers, bss_dict)
+            addBootParams(bss_url, headers, cacert, bss_dict)
         elif args.update_bootparams:
-            updateBootParams(bss_url, headers, bss_dict)
+            updateBootParams(bss_url, headers, cacert, bss_dict)
         elif args.delete_bootparams:
-            deleteBootParams(bss_url, headers, bss_dict)
+            deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
-            bss = getBSS(bss_url, headers)
+            bss = getBSS(bss_url, headers, cacert)
             json_formatted_str = json.dumps(bss, indent=2)
             print(json_formatted_str)
     
