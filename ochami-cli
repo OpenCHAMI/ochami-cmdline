@@ -11,6 +11,8 @@ import base64
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+from ClusterShell.NodeSet import NodeSet
+
 access_token = ""
 cacert=True
 
@@ -161,6 +163,22 @@ def getSMDInterfaces(smd_url, headers, cert, xname):
                 return s
     return {}
 
+def getNidMacMap(smd_url, headers, cert):
+    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
+    macs_xnames = {}
+    for s in data:
+        macs_xnames[s['MACAddress']] = s['ComponentID']
+
+    macs_nids = {}
+    data = makeRequest(url=smd_url+'/State/Components/', r_type='get', headers=headers, cert=cert)
+    for s in data['Components']:
+        for k,v in macs_xnames.items():
+            if s['ID'] == v:
+                macs_nids[k] = s['NID']
+
+    return macs_nids
+
+
 def getMacFromXname(smd_url, headers, cert, xname):
     data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
     mac_list = []
@@ -192,6 +210,26 @@ def getXnameFromNid(smd_url, headers, cert, nid):
 
 
 ############# BSS #############
+
+def printBSS(smd_url, bss_data, headers, cert):
+    data = getNidMacMap(smd_url, headers, cert)
+    for b in bss_data:
+        pdata = {}
+        pdata['nids'] = NodeSet()
+        pdata['kernel'] = b['kernel']
+        pdata['initrd'] = b['initrd']
+        pdata['params'] = b['params']
+        max_nid = max(data.values())
+        nid_length = len(str(max_nid))
+        for m in b['macs']:
+            nid = cluster_prefix+str(data[m]).zfill(nid_length)
+            pdata['nids'].update(nid)
+        print("nodes:", pdata['nids'])
+        print("kernel: ", pdata['kernel'])
+        print("initrd: ", pdata['initrd'])
+        print("params: ", pdata['params'])
+        print()
+
 def getBSS(bss_url, headers, cert):
     data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers, cert=cert)
     return data
@@ -358,6 +396,12 @@ def main():
     args = setArgs()
     headers = {}
 
+    global cluster_prefix
+    if os.getenv('CLUSTER_PREFIX'):
+        cluster_prefix=os.getenv(f"{os.getenv('CLUSTER_PREFIX')}")
+    else:
+        cluster_prefix='nid'
+
     # do access token stuff
     if os.getenv("ACCESS_TOKEN"):
         access_token = os.getenv(f"{os.getenv('ACCESS_TOKEN')}")
@@ -444,8 +488,7 @@ def main():
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
             bss = getBSS(bss_url, headers, cacert)
-            json_formatted_str = json.dumps(bss, indent=2)
-            print(json_formatted_str)
+            printBSS(smd_url, bss, headers, cacert)
     
     elif args.command == "login":
         url = args.url
