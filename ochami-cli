@@ -419,9 +419,9 @@ def main():
     
     # set CA cert var
     if os.getenv("CACERT"):
-        cacert = os.getenv(f"{os.getenv('CACERT')}")
+        cacert = os.getenv('CACERT')
     if args.ca_cert:
-        cacert=args.ca_cert
+        cacert = args.ca_cert
 
     if os.getenv("SMD_URL"):
         smd_url = os.getenv('SMD_URL')
