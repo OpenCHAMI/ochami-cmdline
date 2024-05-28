@@ -142,11 +142,13 @@ def addRedfishEndpoint(smd_url, headers, cert, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
     makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, cert=cert, jdata=re)
 
-def getSMDComponents(smd_url, headers, cert, xname):
-    if not xname:
+def getSMDComponents(smd_url, headers, cert, xname, nid):
+    if not xname and not nid:
         data = makeRequest(url=smd_url+'/State/Components', r_type='get', headers=headers, cert=cert)
-    else:
+    elif xname:
         data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers, cert=cert)
+    elif nid:
+        data = makeRequest(url=smd_url+'/State/Components?nid='+nid, r_type='get', headers=headers, cert=cert)
     return data
 
 def getSMDInterfaces(smd_url, headers, cert, xname):
@@ -172,6 +174,20 @@ def getMacFromXname(smd_url, headers, cert, xname):
                 if 'MACAddress' in s:
                     mac_list.append(s['MACAddress'])
     return mac_list
+
+def getNidFromXname(smd_url, headers, cert, xname):
+    data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers, cert=cert)
+    if 'NID' in data:
+        return data['NID']
+    return None
+
+def getXnameFromNid(smd_url, headers, cert, nid):
+    data = makeRequest(url=smd_url+'/State/Components?nid='+nid, r_type='get', headers=headers, cert=cert)
+    for d in data['Components']:
+        if 'ID' in d:
+            return d['ID']
+    return None
+
 ############# SMD #############
 
 
@@ -194,7 +210,9 @@ def updateBootParams(bss_url, headers, cert, bss_data):
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
 
-def setBootParams(smd_url, bss_url, headers, cert, xname, image, kernel, initrd, params):
+def setBootParams(smd_url, bss_url, headers, cert, xname, nid, image, kernel, initrd, params):
+    if nid:
+        xname = getXnameFromNid(smd_url, headers, cert, nid)
     macs = getMacFromXname(smd_url, headers, cert, xname)
     bss_query = '?mac=' + ','.join(macs)
     bdata = getBSSfiltered(bss_url, bss_query, headers, cert)
@@ -322,6 +340,7 @@ def setArgs():
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
     bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
     bss.add_argument('--xname', type=str)
+    bss.add_argument('--nid', type=str)
     bss.add_argument('--image', type=str)
     bss.add_argument('--kernel', type=str)
     bss.add_argument('--initrd', type=str)
@@ -400,7 +419,7 @@ def main():
         elif args.add_rf_endpoint:
             addRedfishEndpoint(smd_url, headers, cacert, args.name, args.xname, args.mac, args.bmc_ipaddr)
         elif args.get_components:
-            sc = getSMDComponents(smd_url, headers, cacert, args.xname)
+            sc = getSMDComponents(smd_url, headers, cacert, args.xname, args.nid)
             json_formatted_str = json.dumps(sc, indent=2)
             print(json_formatted_str)
         elif args.get_interfaces:
@@ -420,7 +439,7 @@ def main():
                 updateBootParams(bss_url, headers, cacert, bss_dict)
             else:
                 if args.image or args.kernel or args.initrd or args.params:
-                    setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.image, args.kernel, args.initrd, args.params)
+                    setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
         elif args.delete_bootparams:
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
