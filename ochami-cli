@@ -290,7 +290,10 @@ def main():
                     headers = {"Authorization": f"Bearer {access_token}"}
     
     # set CA cert var
-    cacert=args.ca_cert
+    if os.getenv("CACERT"):
+        cacert = os.getenv(f"{os.getenv('CACERT')}")
+    if args.ca_cert:
+        cacert=args.ca_cert
 
     if args.command == "smd":
         if os.getenv("SMD_URL"):
