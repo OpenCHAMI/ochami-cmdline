@@ -108,6 +108,16 @@ def redfishEndpointPayload(smd):
                 ]
             }
     return sdata
+
+def bssPayload(bss):
+    bdata = {
+                'macs': bss['macs'],
+                'initrd': bss['initrd'],
+                'kernel': bss['kernel'],
+                'params': bss['params']
+            }
+    return bdata
+
 ############# UTIL ############
 
 
@@ -148,12 +158,30 @@ def getSMDInterfaces(smd_url, headers, cert, xname):
             if s['ComponentID'] == xname:
                 return s
     return {}
+
+def getMacFromXname(smd_url, headers, cert, xname):
+    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
+    mac_list = []
+    if not xname:
+        for s in data:
+            if 'MACAddress' in s:
+                mac_list.append(s['MACAddress'])
+    else:
+        for s in data:
+            if s['ComponentID'] == xname:
+                if 'MACAddress' in s:
+                    mac_list.append(s['MACAddress'])
+    return mac_list
 ############# SMD #############
 
 
 ############# BSS #############
 def getBSS(bss_url, headers, cert):
     data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers, cert=cert)
+    return data
+
+def getBSSfiltered(bss_url, fil, headers, cert):
+    data = makeRequest(url=bss_url+'/bootparameters'+fil, r_type='get', headers=headers, cert=cert)
     return data
 
 def addBootParams(bss_url, headers, cert, bss_data):
@@ -165,6 +193,38 @@ def updateBootParams(bss_url, headers, cert, bss_data):
 
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
+
+def setBootParams(smd_url, bss_url, headers, cert, xname, image, kernel, initrd, params):
+    macs = getMacFromXname(smd_url, headers, cert, xname)
+    bss_query = '?mac=' + ','.join(macs)
+    bdata = getBSSfiltered(bss_url, bss_query, headers, cert)
+    for b in bdata:
+        if image:
+            param_list = b['params'].split(' ')
+            for p in param_list:
+                if p.startswith('root=nfs') or p.startswith('root=live'):
+                    param_list.remove(p)
+                    img_param = image
+            param_list.append(img_param)
+            new_params = ' '.join(param_list)
+        else:
+            new_params = b['params']
+        if kernel:
+            new_kernel = kernel
+        else:
+            new_kernel = b['kernel']
+        if initrd:
+            new_initrd = initrd
+        else:
+            new_initrd = b['initrd']
+        if params:
+            new_params = params
+        elif not image:
+            new_params = b['params']
+
+        new_bss = bssPayload({'macs': b['macs'], 'kernel': new_kernel, 'initrd': new_initrd, 'params': new_params})
+        updateBootParams(bss_url, headers, cert, new_bss)
+
 ############# BSS #############
 
 ############# AUTH ############
@@ -261,6 +321,11 @@ def setArgs():
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
     bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
+    bss.add_argument('--xname', type=str)
+    bss.add_argument('--image', type=str)
+    bss.add_argument('--kernel', type=str)
+    bss.add_argument('--initrd', type=str)
+    bss.add_argument('--params', type=str)
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
@@ -295,11 +360,17 @@ def main():
     if args.ca_cert:
         cacert=args.ca_cert
 
+    if os.getenv("SMD_URL"):
+        smd_url = os.getenv('SMD_URL')
+    elif args.smd_url:
+        smd_url = args.smd_url
+
+    if os.getenv("BSS_URL"):
+        bss_url = os.getenv('BSS_URL')
+    elif args.url:
+        bss_url = args.url
+
     if args.command == "smd":
-        if os.getenv("SMD_URL"):
-            smd_url = os.getenv('SMD_URL')
-        elif args.url:
-            smd_url = args.url
         if args.config:
             config = args.config
             cdict = readConfig(config)
@@ -337,18 +408,19 @@ def main():
             json_formatted_str = json.dumps(si, indent=2)
             print(json_formatted_str)
 
-
     elif args.command == "bss":
-        config = args.config
-        if os.getenv("BSS_URL"):
-            bss_url = os.getenv('BSS_URL')
-        elif args.url:
-            bss_url = args.url
-        bss_dict = readConfig(config)
+        if args.config:
+            config = args.config
+            bss_dict = readConfig(config)
+
         if args.add_bootparams:
             addBootParams(bss_url, headers, cacert, bss_dict)
         elif args.update_bootparams:
-            updateBootParams(bss_url, headers, cacert, bss_dict)
+            if args.config:
+                updateBootParams(bss_url, headers, cacert, bss_dict)
+            else:
+                if args.image or args.kernel or args.initrd or args.params:
+                    setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.image, args.kernel, args.initrd, args.params)
         elif args.delete_bootparams:
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
