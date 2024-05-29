@@ -124,6 +124,56 @@ def bssPayload(bss):
 
 
 ############# SMD #############
+def dumpSMD(smd_url, headers, cert):
+    data = []
+    smd = getSMDComponents(smd_url, headers, cert, None, None)
+    nid_list = []
+    for s in smd['Components']:
+        if 'NID' in s:
+            nid_list.append(s['NID'])
+    nid_max = max(nid_list)
+    nid_size = len(str(nid_max))
+    for s in smd['Components']:
+        if 'Role' in s:
+            sdict = {}
+            sdict['xname'] = s['ID']
+            sdict['nid'] = s['NID']
+            sdict['name'] = cluster_prefix+str(s['NID']).zfill(nid_size)
+            ei = getSMDInterfaces(smd_url, headers, cert, s['ID'])
+            sdict['mac'] = ei[0]['MACAddress']
+            sdict['ipaddr'] = ei[0]['IPAddresses'][0]['IPAddress']
+            bmc_xname = s['ID'].split('n')[0]
+            ri = getRedfishInterfaces(smd_url, headers, cert, bmc_xname)
+            sdict['bmc_ipaddr'] = ri['RedfishEndpoints'][0]['IPAddress']
+            data.append(sdict)
+    yaml_formatted_str = yaml.dump(data, default_flow_style=False)
+    print(yaml_formatted_str)
+
+def printSMD(smd_url, headers, cert, smd_data, frmt):
+    nodes = {}
+    if frmt == 'json':
+        json_formatted_str = json.dumps(smd_data, indent=2)
+        print(json_formatted_str)
+    elif frmt == 'yaml':
+        yaml_formatted_str = yaml.dump(smd_data, default_flow_style=False)
+        print(yaml_formatted_str)
+    else:
+        if 'Components' in smd_data:
+            for c in smd_data['Components']:
+                if 'Role' in c:
+                    if c['Role'] not in nodes:
+                        nodes[c['Role']] = NodeSet()
+                    nodes[c['Role']].update(c['ID'])
+                else:
+                    if 'BMC' not in nodes:
+                        nodes['BMC'] = NodeSet()
+                    nodes['BMC'].update(c['ID'])
+            for n,v in nodes.items():
+                print(n+': ', v)
+        else:
+            for c in smd_data:
+                print(c['ComponentID'], c['MACAddress'], c['IPAddresses'][0]['IPAddress'])
+
 def addNode(smd_url, headers, cert, xname, nid):
     nc = nodeComponentPayload({'xname': xname, 'nid': nid})
     makeRequest(smd_url+'/State/Components', 'post', headers=headers, cert=cert, jdata=nc)
@@ -154,13 +204,21 @@ def getSMDComponents(smd_url, headers, cert, xname, nid):
     return data
 
 def getSMDInterfaces(smd_url, headers, cert, xname):
-    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
     if not xname:
+        data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
         return data
     else:
-        for s in data:
-            if s['ComponentID'] == xname:
-                return s
+        data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces?ComponentID='+xname, r_type='get', headers=headers, cert=cert)
+        return data
+    return {}
+
+def getRedfishInterfaces(smd_url, headers, cert, xname):
+    if not xname:
+        data = makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='get', headers=headers, cert=cert)
+        return data
+    else:
+        data = makeRequest(url=smd_url+'/Inventory/RedfishEndpoints?ID='+xname, r_type='get', headers=headers, cert=cert)
+        return data
     return {}
 
 def getNidMacMap(smd_url, headers, cert):
@@ -380,6 +438,8 @@ def setArgs():
     smd.add_argument('--ipaddr',type=str)
     smd.add_argument('--bmc-ipaddr',dest="bmc_ipaddr",type=str)
     smd.add_argument('--nid',type=str)
+    smd.add_argument('--format', type=str)
+    smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
     bss.add_argument('--config',type=str)
     bss.add_argument('--url', type=str)
@@ -409,7 +469,7 @@ def main():
 
     global cluster_prefix
     if os.getenv('CLUSTER_PREFIX'):
-        cluster_prefix=os.getenv(f"{os.getenv('CLUSTER_PREFIX')}")
+        cluster_prefix=os.getenv('CLUSTER_PREFIX')
     else:
         cluster_prefix='nid'
 
@@ -475,12 +535,12 @@ def main():
             addRedfishEndpoint(smd_url, headers, cacert, args.name, args.xname, args.mac, args.bmc_ipaddr)
         elif args.get_components:
             sc = getSMDComponents(smd_url, headers, cacert, args.xname, args.nid)
-            json_formatted_str = json.dumps(sc, indent=2)
-            print(json_formatted_str)
+            printSMD(smd_url, headers, cacert, sc, args.format) 
         elif args.get_interfaces:
             si = getSMDInterfaces(smd_url, headers, cacert, args.xname)
-            json_formatted_str = json.dumps(si, indent=2)
-            print(json_formatted_str)
+            printSMD(smd_url, headers, cacert, si, args.format)
+        elif args.dump:
+            dumpSMD(smd_url, headers, cacert)
 
     elif args.command == "bss":
         if args.config:
