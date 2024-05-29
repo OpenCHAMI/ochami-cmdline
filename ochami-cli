@@ -24,11 +24,11 @@ def readConfig(cfile):
 
 
 def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
-    if r_type is "get":
+    if r_type == "get":
         r = requests.get(url, json = jdata, headers=headers, verify=cert)
-    elif r_type is "post":
+    elif r_type == "post":
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
-    elif r_type is "delete":
+    elif r_type == "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
 
     else:
@@ -211,24 +211,28 @@ def getXnameFromNid(smd_url, headers, cert, nid):
 
 ############# BSS #############
 
-def printBSS(smd_url, bss_data, headers, cert):
+def printBSS(smd_url, bss_data, headers, cert, raw):
     data = getNidMacMap(smd_url, headers, cert)
-    for b in bss_data:
-        pdata = {}
-        pdata['nids'] = NodeSet()
-        pdata['kernel'] = b['kernel']
-        pdata['initrd'] = b['initrd']
-        pdata['params'] = b['params']
-        max_nid = max(data.values())
-        nid_length = len(str(max_nid))
-        for m in b['macs']:
-            nid = cluster_prefix+str(data[m]).zfill(nid_length)
-            pdata['nids'].update(nid)
-        print("nodes:", pdata['nids'])
-        print("kernel: ", pdata['kernel'])
-        print("initrd: ", pdata['initrd'])
-        print("params: ", pdata['params'])
-        print()
+    if raw:
+        json_formatted_str = json.dumps(bss_data, indent=2)
+        print(json_formatted_str)
+    else:
+        for b in bss_data:
+            pdata = {}
+            pdata['nids'] = NodeSet()
+            pdata['kernel'] = b['kernel']
+            pdata['initrd'] = b['initrd']
+            pdata['params'] = b['params']
+            max_nid = max(data.values())
+            nid_length = len(str(max_nid))
+            for m in b['macs']:
+                nid = cluster_prefix+str(data[m]).zfill(nid_length)
+                pdata['nids'].update(nid)
+            print("nodes:", pdata['nids'])
+            print("kernel: ", pdata['kernel'])
+            print("initrd: ", pdata['initrd'])
+            print("params: ", pdata['params'])
+            print()
 
 def getBSS(bss_url, headers, cert):
     data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers, cert=cert)
@@ -383,6 +387,7 @@ def setArgs():
     bss.add_argument('--kernel', type=str)
     bss.add_argument('--initrd', type=str)
     bss.add_argument('--params', type=str)
+    bss.add_argument('--raw', action="store_true", default=False)
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
@@ -488,7 +493,7 @@ def main():
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
             bss = getBSS(bss_url, headers, cacert)
-            printBSS(smd_url, bss, headers, cacert)
+            printBSS(smd_url, bss, headers, cacert, args.raw)
     
     elif args.command == "login":
         url = args.url
