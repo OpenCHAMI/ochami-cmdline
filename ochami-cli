@@ -211,11 +211,17 @@ def getXnameFromNid(smd_url, headers, cert, nid):
 
 ############# BSS #############
 
-def printBSS(smd_url, bss_data, headers, cert, raw):
+def printBSS(smd_url, bss_data, headers, cert, frmt):
+    for b in bss_data:
+        if 'cloud-init' in b:
+            del b['cloud-init']
     data = getNidMacMap(smd_url, headers, cert)
-    if raw:
+    if frmt == 'json':
         json_formatted_str = json.dumps(bss_data, indent=2)
         print(json_formatted_str)
+    elif frmt == 'yaml':
+        yaml_formatted_str = yaml.dump(bss_data, default_flow_style=False)
+        print(yaml_formatted_str)
     else:
         for b in bss_data:
             pdata = {}
@@ -387,7 +393,7 @@ def setArgs():
     bss.add_argument('--kernel', type=str)
     bss.add_argument('--initrd', type=str)
     bss.add_argument('--params', type=str)
-    bss.add_argument('--raw', action="store_true", default=False)
+    bss.add_argument('--format', type=str)
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
@@ -493,7 +499,7 @@ def main():
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
             bss = getBSS(bss_url, headers, cacert)
-            printBSS(smd_url, bss, headers, cacert, args.raw)
+            printBSS(smd_url, bss, headers, cacert, args.format)
     
     elif args.command == "login":
         url = args.url
