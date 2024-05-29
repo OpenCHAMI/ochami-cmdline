@@ -71,24 +71,24 @@ nodes:
 
 BSS can be populated with a config file:
 ```bash
-./ochami-cli --bss-url http://smd:27778/boot/v1 bss --config bss.yml --add-bootparams
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --config bss.yml --add-bootparams
 ```
 or updated
 ```bash
-./ochami-cli --bss-url http://smd:27778/boot/v1 bss --config bss.yml --update-bootparams
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --config bss.yml --update-bootparams
 ```
 
 Individual components can be updates as well, you can choose one or more of the following after specifying `--update-bootparams`; `--kernel`, `--initrd`, `--image`, `--params`.
 Updating the `--image` and `--params` at the same time will result in the `--params` overwriting what is specified in `--image`
 ```bash
-./ochami-cli --bss-url http://smd:27778/boot/v1 bss --update-bootparams --image <image>
-./ochami-cli --bss-url http://smd:27778/boot/v1 bss --update-bootparams --kernel <kernel> --initrd <initrd>
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --update-bootparams --image <image>
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --update-bootparams --kernel <kernel> --initrd <initrd>
 ```
 If no `--xname` or `--nid` is specified this will update all the nodes.
 
 You can get the state of BSS with
 ```bash
-./ochami-cli --bss-url http://smd:27778/boot/v1 bss --get-bootparams --format {none|json|yaml}
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --get-bootparams --format {none|json|yaml}
 ```
 
 Here is an example BSS config file:
@@ -118,18 +118,26 @@ You can include the token when performing actions that require it:
 ```
 
 ## Configuration
-
-Here is an example `config.yaml` to get started using the `ochami-cli` tool:
-
+If SMD and/or BSS are configured to use cacerts and JWTs you can specify these with
 ```bash
-nodes:
-  - name: cg01
-    xname: x1000c1s7b0n0
-    mac: b4:...
-    ipaddr: 172.16.0.1
-  - name: cg02
-    xname: x1000c1s7b1n0
-    mac: b4:...
-    ipaddr: 172.16.0.2
-access-token: eyJhbGciOiJ...
+./ochami-cli --ca-cert --access-token ...
+```
+you can also set environemnt variables for BOTH of these:
+```bash
+export CACERT=/path/to/cacert
+export ACCESS_TOKEN=eyJhbGciOiJ
+```
+
+Other helpful environment variables:
+Skip having to specify `--smd-url`
+```bash
+export SMD_URL=http://smd:27779/hsm/v2
+```
+Skip having to specify `--bss-url`
+```bash
+export BSS_URL=http://bss:27778/boot/v1
+```
+Set NID name prefix (i.e. `nid001`). useful is you want to use something specific to your cluster. Only used on outputing SMD and BSS data.
+```bash
+export CLUSTER_PREFIX="nid"
 ```
