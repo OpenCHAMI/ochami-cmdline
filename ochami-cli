@@ -17,6 +17,23 @@ access_token = ""
 cacert=True
 
 ############# UTIL ############
+def checkTokenExpired(access_token):
+    import jwt
+    from datetime import datetime, timedelta
+    import sys
+
+    try:
+        decoded = jwt.decode(jwt=access_token, algorithms=["RS256"], options={"verify_signature": False, "verify_aud": False})
+    except jwt.ExpiredSignatureError:
+        print("Token is expired. Generate a new ACCESS_TOKEN")
+        sys.exit(1)
+    else:
+        exp = decoded['exp']
+        now = int(str(datetime.now().timestamp()).split(".")[0])
+        diff = exp - now
+        if diff <= 600:
+            print("Token will expire in " + str(timedelta(seconds=diff)) + ' minutes')
+
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
         cdict = yaml.safe_load(f)
@@ -475,7 +492,7 @@ def main():
 
     # do access token stuff
     if os.getenv("ACCESS_TOKEN"):
-        access_token = os.getenv(f"{os.getenv('ACCESS_TOKEN')}")
+        access_token = os.getenv('ACCESS_TOKEN')
         headers = {"Authorization": f"Bearer {os.getenv('ACCESS_TOKEN')}"}
     if args.access_token:
         access_token = args.access_token
@@ -487,6 +504,7 @@ def main():
                 access_token = f.read()
                 if access_token:
                     headers = {"Authorization": f"Bearer {access_token}"}
+    checkTokenExpired(access_token)
     
     # set CA cert var
     if os.getenv("CACERT"):
