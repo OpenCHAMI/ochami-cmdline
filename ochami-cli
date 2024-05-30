@@ -586,7 +586,10 @@ def main():
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
             bss = getBSS(bss_url, headers, cacert)
-            printBSS(smd_url, bss, headers, cacert, args.format)
+            if not bss:
+                print("null")
+            else:
+                printBSS(smd_url, bss, headers, cacert, args.format)
     
     elif args.command == "login":
         url = args.url
