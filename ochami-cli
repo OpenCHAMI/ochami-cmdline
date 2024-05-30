@@ -4,6 +4,7 @@ import yaml
 import argparse
 import json
 import os
+import sys
 import webbrowser
 import urllib
 import uuid
@@ -11,10 +12,29 @@ import base64
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+from ClusterShell.NodeSet import NodeSet
+
 access_token = ""
 cacert=True
 
 ############# UTIL ############
+def checkTokenExpired(access_token):
+    import jwt
+    from datetime import datetime, timedelta
+
+    try:
+        decoded = jwt.decode(jwt=access_token, algorithms=["RS256"], options={"verify_signature": False, "verify_aud": False})
+    except jwt.ExpiredSignatureError:
+        print("Token is expired. Generate a new ACCESS_TOKEN")
+        return False
+    else:
+        exp = decoded['exp']
+        now = int(str(datetime.now().timestamp()).split(".")[0])
+        diff = exp - now
+        if diff <= 600:
+            print("Token will expire in " + str(timedelta(seconds=diff)) + ' minutes')
+        return True
+
 def readConfig(cfile):
     with open(cfile, mode='r') as f:
         cdict = yaml.safe_load(f)
@@ -22,11 +42,11 @@ def readConfig(cfile):
 
 
 def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
-    if r_type is "get":
+    if r_type == "get":
         r = requests.get(url, json = jdata, headers=headers, verify=cert)
-    elif r_type is "post":
+    elif r_type == "post":
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
-    elif r_type is "delete":
+    elif r_type == "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
 
     else:
@@ -108,10 +128,72 @@ def redfishEndpointPayload(smd):
                 ]
             }
     return sdata
+
+def bssPayload(bss):
+    bdata = {
+                'macs': bss['macs'],
+                'initrd': bss['initrd'],
+                'kernel': bss['kernel'],
+                'params': bss['params']
+            }
+    return bdata
+
 ############# UTIL ############
 
 
 ############# SMD #############
+def dumpSMD(smd_url, headers, cert):
+    data = []
+    smd = getSMDComponents(smd_url, headers, cert, None, None)
+    nid_list = []
+    for s in smd['Components']:
+        if 'NID' in s:
+            nid_list.append(s['NID'])
+    nid_max = max(nid_list)
+    nid_size = len(str(nid_max))
+    for s in smd['Components']:
+        if 'Role' in s:
+            sdict = {}
+            sdict['xname'] = s['ID']
+            sdict['nid'] = s['NID']
+            sdict['name'] = cluster_prefix+str(s['NID']).zfill(nid_size)
+            ei = getSMDInterfaces(smd_url, headers, cert, s['ID'])
+            sdict['mac'] = ei[0]['MACAddress']
+            sdict['ipaddr'] = ei[0]['IPAddresses'][0]['IPAddress']
+            bmc_xname = s['ID'].split('n')[0]
+            ri = getRedfishInterfaces(smd_url, headers, cert, bmc_xname)
+            sdict['bmc_ipaddr'] = ri['RedfishEndpoints'][0]['IPAddress']
+            data.append(sdict)
+    yaml_formatted_str = yaml.dump(data, default_flow_style=False)
+    print(yaml_formatted_str)
+
+def printSMD(smd_url, headers, cert, smd_data, frmt):
+    nodes = {}
+    if frmt == 'json':
+        json_formatted_str = json.dumps(smd_data, indent=2)
+        print(json_formatted_str)
+    elif frmt == 'yaml':
+        yaml_formatted_str = yaml.dump(smd_data, default_flow_style=False)
+        print(yaml_formatted_str)
+    else:
+        if 'Components' in smd_data:
+            for c in smd_data['Components']:
+                if 'Role' in c:
+                    if c['Role'] not in nodes:
+                        nodes[c['Role']] = NodeSet()
+                    nodes[c['Role']].update(c['ID'])
+                else:
+                    if 'BMC' not in nodes:
+                        nodes['BMC'] = NodeSet()
+                    nodes['BMC'].update(c['ID'])
+            for n,v in nodes.items():
+                print(n+': ', v)
+        elif type(smd_data) is list:
+            for c in smd_data:
+                print(c['ComponentID'], c['MACAddress'], c['IPAddresses'][0]['IPAddress'])
+        elif type(smd_data) is dict:
+            print(json.dumps(smd_data, indent=2))
+
 def addNode(smd_url, headers, cert, xname, nid):
     nc = nodeComponentPayload({'xname': xname, 'nid': nid})
     makeRequest(smd_url+'/State/Components', 'post', headers=headers, cert=cert, jdata=nc)
@@ -132,28 +214,116 @@ def addRedfishEndpoint(smd_url, headers, cert, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
     makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, cert=cert, jdata=re)
 
-def getSMDComponents(smd_url, headers, cert, xname):
-    if not xname:
+def getSMDComponents(smd_url, headers, cert, xname, nid):
+    if not xname and not nid:
         data = makeRequest(url=smd_url+'/State/Components', r_type='get', headers=headers, cert=cert)
-    else:
+    elif xname:
         data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers, cert=cert)
+    elif nid:
+        data = makeRequest(url=smd_url+'/State/Components?nid='+nid, r_type='get', headers=headers, cert=cert)
     return data
 
 def getSMDInterfaces(smd_url, headers, cert, xname):
-    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
     if not xname:
+        data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
         return data
+    else:
+        data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces?ComponentID='+xname, r_type='get', headers=headers, cert=cert)
+        return data
+    return {}
+
+def getRedfishInterfaces(smd_url, headers, cert, xname):
+    if not xname:
+        data = makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='get', headers=headers, cert=cert)
+        return data
+    else:
+        data = makeRequest(url=smd_url+'/Inventory/RedfishEndpoints?ID='+xname, r_type='get', headers=headers, cert=cert)
+        return data
+    return {}
+
+def getNidMacMap(smd_url, headers, cert):
+    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
+    macs_xnames = {}
+    for s in data:
+        macs_xnames[s['MACAddress']] = s['ComponentID']
+
+    macs_nids = {}
+    data = makeRequest(url=smd_url+'/State/Components/', r_type='get', headers=headers, cert=cert)
+    for s in data['Components']:
+        for k,v in macs_xnames.items():
+            if s['ID'] == v:
+                macs_nids[k] = s['NID']
+
+    return macs_nids
+
+
+def getMacFromXname(smd_url, headers, cert, xname):
+    data = makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='get', headers=headers, cert=cert)
+    mac_list = []
+    if not xname:
+        for s in data:
+            if 'MACAddress' in s:
+                mac_list.append(s['MACAddress'])
     else:
         for s in data:
             if s['ComponentID'] == xname:
-                return s
-    return {}
+                if 'MACAddress' in s:
+                    mac_list.append(s['MACAddress'])
+    return mac_list
+
+def getNidFromXname(smd_url, headers, cert, xname):
+    data = makeRequest(url=smd_url+'/State/Components/'+xname, r_type='get', headers=headers, cert=cert)
+    if 'NID' in data:
+        return data['NID']
+    return None
+
+def getXnameFromNid(smd_url, headers, cert, nid):
+    data = makeRequest(url=smd_url+'/State/Components?nid='+nid, r_type='get', headers=headers, cert=cert)
+    for d in data['Components']:
+        if 'ID' in d:
+            return d['ID']
+    return None
+
 ############# SMD #############
 
 
 ############# BSS #############
+
+def printBSS(smd_url, bss_data, headers, cert, frmt):
+    for b in bss_data:
+        if 'cloud-init' in b:
+            del b['cloud-init']
+    data = getNidMacMap(smd_url, headers, cert)
+    if frmt == 'json':
+        json_formatted_str = json.dumps(bss_data, indent=2)
+        print(json_formatted_str)
+    elif frmt == 'yaml':
+        yaml_formatted_str = yaml.dump(bss_data, default_flow_style=False)
+        print(yaml_formatted_str)
+    else:
+        for b in bss_data:
+            pdata = {}
+            pdata['nids'] = NodeSet()
+            pdata['kernel'] = b['kernel']
+            pdata['initrd'] = b['initrd']
+            pdata['params'] = b['params']
+            max_nid = max(data.values())
+            nid_length = len(str(max_nid))
+            for m in b['macs']:
+                nid = cluster_prefix+str(data[m]).zfill(nid_length)
+                pdata['nids'].update(nid)
+            print("nodes:", pdata['nids'])
+            print("kernel: ", pdata['kernel'])
+            print("initrd: ", pdata['initrd'])
+            print("params: ", pdata['params'])
+            print()
+
 def getBSS(bss_url, headers, cert):
     data = makeRequest(url=bss_url+'/bootparameters', r_type='get', headers=headers, cert=cert)
+    return data
+
+def getBSSfiltered(bss_url, fil, headers, cert):
+    data = makeRequest(url=bss_url+'/bootparameters'+fil, r_type='get', headers=headers, cert=cert)
     return data
 
 def addBootParams(bss_url, headers, cert, bss_data):
@@ -165,6 +335,40 @@ def updateBootParams(bss_url, headers, cert, bss_data):
 
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
+
+def setBootParams(smd_url, bss_url, headers, cert, xname, nid, image, kernel, initrd, params):
+    if nid:
+        xname = getXnameFromNid(smd_url, headers, cert, nid)
+    macs = getMacFromXname(smd_url, headers, cert, xname)
+    bss_query = '?mac=' + ','.join(macs)
+    bdata = getBSSfiltered(bss_url, bss_query, headers, cert)
+    for b in bdata:
+        if image:
+            param_list = b['params'].split(' ')
+            for p in param_list:
+                if p.startswith('root=nfs') or p.startswith('root=live'):
+                    param_list.remove(p)
+                    img_param = image
+            param_list.append(img_param)
+            new_params = ' '.join(param_list)
+        else:
+            new_params = b['params']
+        if kernel:
+            new_kernel = kernel
+        else:
+            new_kernel = b['kernel']
+        if initrd:
+            new_initrd = initrd
+        else:
+            new_initrd = b['initrd']
+        if params:
+            new_params = params
+        elif not image:
+            new_params = b['params']
+
+        new_bss = bssPayload({'macs': b['macs'], 'kernel': new_kernel, 'initrd': new_initrd, 'params': new_params})
+        updateBootParams(bss_url, headers, cert, new_bss)
+
 ############# BSS #############
 
 ############# AUTH ############
@@ -254,6 +458,8 @@ def setArgs():
     smd.add_argument('--ipaddr',type=str)
     smd.add_argument('--bmc-ipaddr',dest="bmc_ipaddr",type=str)
     smd.add_argument('--nid',type=str)
+    smd.add_argument('--format', type=str)
+    smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
     bss.add_argument('--config',type=str)
     bss.add_argument('--url', type=str)
@@ -261,6 +467,13 @@ def setArgs():
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
     bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
+    bss.add_argument('--xname', type=str)
+    bss.add_argument('--nid', type=str)
+    bss.add_argument('--image', type=str)
+    bss.add_argument('--kernel', type=str)
+    bss.add_argument('--initrd', type=str)
+    bss.add_argument('--params', type=str)
+    bss.add_argument('--format', type=str)
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
@@ -274,9 +487,15 @@ def main():
     args = setArgs()
     headers = {}
 
+    global cluster_prefix
+    if os.getenv('CLUSTER_PREFIX'):
+        cluster_prefix=os.getenv('CLUSTER_PREFIX')
+    else:
+        cluster_prefix='nid'
+
     # do access token stuff
     if os.getenv("ACCESS_TOKEN"):
-        access_token = os.getenv(f"{os.getenv('ACCESS_TOKEN')}")
+        access_token = os.getenv('ACCESS_TOKEN')
         headers = {"Authorization": f"Bearer {os.getenv('ACCESS_TOKEN')}"}
     if args.access_token:
         access_token = args.access_token
@@ -288,18 +507,32 @@ def main():
                 access_token = f.read()
                 if access_token:
                     headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Check Token
+    if args.command != "login":
+        if not access_token:
+            print("ERROR: Neither --access-token, --access-token-file, nor ACCESS_TOKEN were set.")
+            sys.exit(1)
+        if not checkTokenExpired(access_token):
+            sys.exit(1)
     
     # set CA cert var
     if os.getenv("CACERT"):
-        cacert = os.getenv(f"{os.getenv('CACERT')}")
+        cacert = os.getenv('CACERT')
     if args.ca_cert:
-        cacert=args.ca_cert
+        cacert = args.ca_cert
+
+    if os.getenv("SMD_URL"):
+        smd_url = os.getenv('SMD_URL')
+    elif args.smd_url:
+        smd_url = args.smd_url
+
+    if os.getenv("BSS_URL"):
+        bss_url = os.getenv('BSS_URL')
+    elif args.url:
+        bss_url = args.url
 
     if args.command == "smd":
-        if os.getenv("SMD_URL"):
-            smd_url = os.getenv('SMD_URL')
-        elif args.url:
-            smd_url = args.url
         if args.config:
             config = args.config
             cdict = readConfig(config)
@@ -329,32 +562,35 @@ def main():
         elif args.add_rf_endpoint:
             addRedfishEndpoint(smd_url, headers, cacert, args.name, args.xname, args.mac, args.bmc_ipaddr)
         elif args.get_components:
-            sc = getSMDComponents(smd_url, headers, cacert, args.xname)
-            json_formatted_str = json.dumps(sc, indent=2)
-            print(json_formatted_str)
+            sc = getSMDComponents(smd_url, headers, cacert, args.xname, args.nid)
+            printSMD(smd_url, headers, cacert, sc, args.format) 
         elif args.get_interfaces:
             si = getSMDInterfaces(smd_url, headers, cacert, args.xname)
-            json_formatted_str = json.dumps(si, indent=2)
-            print(json_formatted_str)
-
+            printSMD(smd_url, headers, cacert, si, args.format)
+        elif args.dump:
+            dumpSMD(smd_url, headers, cacert)
 
     elif args.command == "bss":
-        config = args.config
-        if os.getenv("BSS_URL"):
-            bss_url = os.getenv('BSS_URL')
-        elif args.url:
-            bss_url = args.url
-        bss_dict = readConfig(config)
+        if args.config:
+            config = args.config
+            bss_dict = readConfig(config)
+
         if args.add_bootparams:
             addBootParams(bss_url, headers, cacert, bss_dict)
         elif args.update_bootparams:
-            updateBootParams(bss_url, headers, cacert, bss_dict)
+            if args.config:
+                updateBootParams(bss_url, headers, cacert, bss_dict)
+            else:
+                if args.image or args.kernel or args.initrd or args.params:
+                    setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
         elif args.delete_bootparams:
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
             bss = getBSS(bss_url, headers, cacert)
-            json_formatted_str = json.dumps(bss, indent=2)
-            print(json_formatted_str)
+            if not bss:
+                print("null")
+            else:
+                printBSS(smd_url, bss, headers, cacert, args.format)
     
     elif args.command == "login":
         url = args.url
