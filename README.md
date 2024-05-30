@@ -7,8 +7,12 @@ The tool comes with two other sub-commands `smd` and `bss` to interact with SMD 
 ## Managing Nodes
 
 ### SMD
-Nodes can be added to SMD with a config file using the following command pointing to an instance of SMD:
+You can skip specifying the `--smd-url` for each command by setting
+```bash
+export SMD_URL=http://smd:27779/hsm/v2
+```
 
+Nodes can be added to SMD with a config file using the following command pointing to an instance of SMD:
 ```bash
 ./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --config config.yml
 ```
@@ -22,9 +26,9 @@ and deleted with
 ```bash
 ./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --delete-node --xname <xname>
 ```
-You can also get the components in SMD with 
+You can also get the components in SMD with. You can specify the format with `--format`. The options are `json` and `yaml`. If not specified the output will be condensed. 
 ```bash
-./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-components --format {none|json|yaml}
+./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-components --format {json|yaml}
 ```
 or specify an `xname` or `nid`
 ```bash
@@ -41,11 +45,11 @@ and deleted with
 ```
 Get all the EthernetInterfaces:
 ```bash
-./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-interfaces --format {none|json|yaml}
+./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-interfaces --format {json|yaml}
 ```
 or specify an xname
 ```bash
-./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-interfaces--xname <xname>
+./ochami-cli --smd-url http://smd:27779/hsm/v2 smd --get-interfaces --xname <xname>
 ```
 
 You can dump SMD into yaml format that can then be read back into SMD. Useful for saving as a backup or saving updates done with the cmdline.
@@ -68,6 +72,10 @@ nodes:
     bmc_ipaddr: 172.16.100.1
 ```
 ### BSS
+You can skip specifying `--bss-url` by setting
+```bash
+export BSS_URL=http://bss:27778/boot/v1
+```
 
 BSS can be populated with a config file:
 ```bash
@@ -88,8 +96,9 @@ If no `--xname` or `--nid` is specified this will update all the nodes.
 
 You can get the state of BSS with
 ```bash
-./ochami-cli --bss-url http://bss:27778/boot/v1 bss --get-bootparams --format {none|json|yaml}
+./ochami-cli --bss-url http://bss:27778/boot/v1 bss --get-bootparams --format {json|yaml}
 ```
+You can specify the format with `--format`. The options are `json` and `yaml`. If not specified the output will be condensed.
 
 Here is an example BSS config file:
 ```yaml
@@ -128,7 +137,7 @@ export CACERT=/path/to/cacert
 export ACCESS_TOKEN=eyJhbGciOiJ
 ```
 
-Other helpful environment variables:
+Helpful environment variables:
 Skip having to specify `--smd-url`
 ```bash
 export SMD_URL=http://smd:27779/hsm/v2
