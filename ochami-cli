@@ -509,11 +509,12 @@ def main():
                     headers = {"Authorization": f"Bearer {access_token}"}
 
     # Check Token
-    if not access_token:
-        print("ERROR: Neither --access-token, --access-token-file, nor ACCESS_TOKEN were set.")
-        sys.exit(1)
-    if not checkTokenExpired(access_token):
-        sys.exit(1)
+    if args.command != "login":
+        if not access_token:
+            print("ERROR: Neither --access-token, --access-token-file, nor ACCESS_TOKEN were set.")
+            sys.exit(1)
+        if not checkTokenExpired(access_token):
+            sys.exit(1)
     
     # set CA cert var
     if os.getenv("CACERT"):
