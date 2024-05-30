@@ -4,6 +4,12 @@ The `ochami-cli` tool provides a simple, and direct way to interact with OpenCHA
 
 The tool comes with two other sub-commands `smd` and `bss` to interact with SMD and BSS respectively. 
 
+## Installing Dependencies
+
+```
+pip install -r requirements.txt
+```
+
 ## Managing Nodes
 
 ### SMD
