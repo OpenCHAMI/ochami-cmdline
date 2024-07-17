@@ -439,11 +439,12 @@ def setArgs():
     parser.add_argument("--access-token", dest="access_token", default="", type=str)
     parser.add_argument("--access-token-file", dest="access_token_file", default=".access-token", type=str)
     parser.add_argument("--ca-cert", dest="ca_cert", type=str, default="", help="set path for CA certificate")
+    parser.add_argument('--smd-url', type=str)
+    parser.add_argument('--bss-url', type=str)
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
     smd.add_argument('--config', type=str)
-    smd.add_argument('--url',type=str)
     smd.add_argument('--add-node', dest='add_node', action="store_true", default=False)
     smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
     smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
@@ -462,7 +463,6 @@ def setArgs():
     smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
     bss.add_argument('--config',type=str)
-    bss.add_argument('--url', type=str)
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
@@ -529,8 +529,8 @@ def main():
 
     if os.getenv("BSS_URL"):
         bss_url = os.getenv('BSS_URL')
-    elif args.url:
-        bss_url = args.url
+    elif args.bss_url:
+        bss_url = args.bss_url
 
     if args.command == "smd":
         if args.config:
