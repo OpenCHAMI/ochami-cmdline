@@ -522,15 +522,15 @@ def main():
     if args.ca_cert:
         cacert = args.ca_cert
 
-    if os.getenv("SMD_URL"):
-        smd_url = os.getenv('SMD_URL')
-    elif args.smd_url:
+    if args.smd_url:
         smd_url = args.smd_url
+    elif os.getenv("SMD_URL"):
+        smd_url = os.getenv('SMD_URL')
 
-    if os.getenv("BSS_URL"):
-        bss_url = os.getenv('BSS_URL')
-    elif args.bss_url:
+    if args.bss_url:
         bss_url = args.bss_url
+    elif os.getenv("BSS_URL"):
+        bss_url = os.getenv('BSS_URL')
 
     if args.command == "smd":
         if args.config:
