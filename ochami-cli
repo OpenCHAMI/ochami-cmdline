@@ -47,6 +47,8 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
         r = requests.get(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "post":
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
+    elif r_type == "put":
+        r = requests.put(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
 
@@ -342,8 +344,7 @@ def addBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
 
 def updateBootParams(bss_url, headers, cert, bss_data):
-    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
-    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
+    makeRequest(url=bss_url+'/bootparameters', r_type='put', jdata=bss_data, headers=headers, cert=cert)
 
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
