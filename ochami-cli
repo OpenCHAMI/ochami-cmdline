@@ -59,11 +59,11 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
     except requests.exceptions.HTTPError as e:
         pass
     finally:
-        if verbose:
+        if verbose or not r.ok:
             print(f'HTTP {r.status_code} ({r.reason})')
         ret = {}
         if r.content:
-            if verbose:
+            if verbose or not r.ok:
                 print(f'Response: {r.content.decode("utf-8")}')
             try:
                 ret = r.json()
