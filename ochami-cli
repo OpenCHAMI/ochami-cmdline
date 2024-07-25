@@ -49,6 +49,8 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "put":
         r = requests.put(url, json = jdata, headers=headers, verify=cert)
+    elif r_type == "patch":
+        r = requests.patch(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
 
@@ -346,6 +348,42 @@ def addBootParams(bss_url, headers, cert, bss_data):
 def updateBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='put', jdata=bss_data, headers=headers, cert=cert)
 
+def patchBootParamsConfig(bss_url, headers, cert, bss_data):
+    makeRequest(url=bss_url+'/bootparameters', r_type='patch', jdata=bss_data, headers=headers, cert=cert)
+
+def patchBootParamsArgs(smd_url, bss_url, headers, cert, xname, nid, image, kernel, initrd, params):
+    if nid:
+        xname = getXnameFromNid(smd_url, headers, cert, nid)
+    macs = getMacFromXname(smd_url, headers, cert, xname)
+    bss_query = '?mac=' + ','.join(macs)
+    bdata = getBSSfiltered(bss_url, bss_query, headers, cert)
+    for b in bdata:
+        if image:
+            param_list = b['params'].split(' ')
+            for p in param_list:
+                if p.startswith('root=nfs') or p.startswith('root=live'):
+                    param_list.remove(p)
+                    img_param = image
+            param_list.append(img_param)
+            new_params = ' '.join(param_list)
+        else:
+            new_params = b['params']
+        if kernel:
+            new_kernel = kernel
+        else:
+            new_kernel = b['kernel']
+        if initrd:
+            new_initrd = initrd
+        else:
+            new_initrd = b['initrd']
+        if params:
+            new_params = params
+        elif not image:
+            new_params = b['params']
+
+        new_bss = bssPayload({'macs': b['macs'], 'kernel': new_kernel, 'initrd': new_initrd, 'params': new_params})
+        patchBootParamsConfig(bss_url, headers, cert, new_bss)
+
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
 
@@ -479,6 +517,7 @@ def setArgs():
     bss.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to BSS")
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False, help="Create boot parameters (must not already exist)")
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False, help="Set or update boot parameters for one or more hosts")
+    bss.add_argument('--patch-bootparams', dest='patch_bootparams', action="store_true", default=False, help="Update an existing entry with new boot parameters while retaining existing settings")
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False, help="Delete existing boot parameters")
     bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False, help="Retrieve boot parameters")
     bss.add_argument('--xname', type=str)
@@ -600,6 +639,12 @@ def main():
             else:
                 if args.image or args.kernel or args.initrd or args.params:
                     setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
+        elif args.patch_bootparams:
+            if args.config:
+                patchBootParamsConfig(bss_url, headers, cacert, bss_dict)
+            else:
+                if args.image or args.kernel or args.initrd or args.params:
+                    patchBootParamsArgs(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
         elif args.delete_bootparams:
             deleteBootParams(bss_url, headers, cacert, bss_dict)
         elif args.get_bootparams:
