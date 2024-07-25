@@ -458,7 +458,7 @@ def setArgs():
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
-    smd.add_argument('--config', type=str)
+    smd.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to SMD")
     smd.add_argument('--add-node', dest='add_node', action="store_true", default=False)
     smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
     smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
@@ -476,7 +476,7 @@ def setArgs():
     smd.add_argument('--format', type=str, help="Output format; can be 'json' or 'yaml', anything else (default) uses a condensed yaml format")
     smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
-    bss.add_argument('--config',type=str)
+    bss.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to BSS")
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False, help="Create boot parameters (must not already exist)")
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False, help="Set or update boot parameters for one or more hosts")
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False, help="Delete existing boot parameters")
