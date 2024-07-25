@@ -53,11 +53,20 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
         print("unrecognized request type: ", r_type)
 
     # Make this more informative when things break...
-    r.raise_for_status()
-    if r.content:
-        return r.json()
-    else:
-        return {}
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        pass
+    finally:
+        print(f'HTTP {r.status_code} ({r.reason})')
+        ret = {}
+        if r.content:
+            print(f'Response: {r.content.decode("utf-8")}')
+            try:
+                ret = r.json()
+            except:
+                pass
+        return ret
 
 def nodeComponentPayload(smd):
     sdata = {
