@@ -16,6 +16,7 @@ from ClusterShell.NodeSet import NodeSet
 
 access_token = ""
 cacert=True
+verbose=False
 
 ############# UTIL ############
 def checkTokenExpired(access_token):
@@ -58,10 +59,12 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
     except requests.exceptions.HTTPError as e:
         pass
     finally:
-        print(f'HTTP {r.status_code} ({r.reason})')
+        if verbose:
+            print(f'HTTP {r.status_code} ({r.reason})')
         ret = {}
         if r.content:
-            print(f'Response: {r.content.decode("utf-8")}')
+            if verbose:
+                print(f'Response: {r.content.decode("utf-8")}')
             try:
                 ret = r.json()
             except:
@@ -450,6 +453,7 @@ def setArgs():
     parser.add_argument("--ca-cert", dest="ca_cert", type=str, default="", help="set path for CA certificate")
     parser.add_argument('--smd-url', type=str)
     parser.add_argument('--bss-url', type=str)
+    parser.add_argument('--verbose', '-v', action='store_true')
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
@@ -493,6 +497,7 @@ def setArgs():
 def main():
     global access_token
     global cacert
+    global verbose
     args = setArgs()
     headers = {}
 
@@ -501,6 +506,8 @@ def main():
         cluster_prefix=os.getenv('CLUSTER_PREFIX')
     else:
         cluster_prefix='nid'
+
+    verbose = args.verbose
 
     # do access token stuff
     if os.getenv("ACCESS_TOKEN"):
