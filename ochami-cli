@@ -47,6 +47,8 @@ def makeRequest(url, r_type, headers, jdata=None, cert=cacert):
         r = requests.get(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "post":
         r = requests.post(url, json = jdata, headers=headers, verify=cert)
+    elif r_type == "put":
+        r = requests.put(url, json = jdata, headers=headers, verify=cert)
     elif r_type == "delete":
         r = requests.delete(url, json = jdata, headers=headers, verify=cert)
 
@@ -342,8 +344,7 @@ def addBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
 
 def updateBootParams(bss_url, headers, cert, bss_data):
-    makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
-    makeRequest(url=bss_url+'/bootparameters', r_type='post', jdata=bss_data, headers=headers, cert=cert)
+    makeRequest(url=bss_url+'/bootparameters', r_type='put', jdata=bss_data, headers=headers, cert=cert)
 
 def deleteBootParams(bss_url, headers, cert, bss_data):
     makeRequest(url=bss_url+'/bootparameters', r_type='delete', jdata=bss_data, headers=headers, cert=cert)
@@ -457,7 +458,7 @@ def setArgs():
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
-    smd.add_argument('--config', type=str)
+    smd.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to SMD")
     smd.add_argument('--add-node', dest='add_node', action="store_true", default=False)
     smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
     smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
@@ -472,21 +473,21 @@ def setArgs():
     smd.add_argument('--ipaddr',type=str)
     smd.add_argument('--bmc-ipaddr',dest="bmc_ipaddr",type=str)
     smd.add_argument('--nid',type=str)
-    smd.add_argument('--format', type=str)
+    smd.add_argument('--format', type=str, help="Output format; can be 'json' or 'yaml', anything else (default) uses a condensed yaml format")
     smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
-    bss.add_argument('--config',type=str)
-    bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
-    bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
-    bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
-    bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
+    bss.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to BSS")
+    bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False, help="Create boot parameters (must not already exist)")
+    bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False, help="Set or update boot parameters for one or more hosts")
+    bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False, help="Delete existing boot parameters")
+    bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False, help="Retrieve boot parameters")
     bss.add_argument('--xname', type=str)
     bss.add_argument('--nid', type=str)
     bss.add_argument('--image', type=str)
     bss.add_argument('--kernel', type=str)
     bss.add_argument('--initrd', type=str)
     bss.add_argument('--params', type=str)
-    bss.add_argument('--format', type=str)
+    bss.add_argument('--format', type=str, help="Output format; can be 'json' or 'yaml', anything else (default) uses a condensed yaml format")
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
