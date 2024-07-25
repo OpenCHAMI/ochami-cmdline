@@ -478,7 +478,7 @@ def setArgs():
     bss = subparser.add_parser('bss')
     bss.add_argument('--config',type=str)
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False)
-    bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False)
+    bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False, help="Set or update boot parameters for one or more hosts")
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False)
     bss.add_argument('--get-bootparams', dest='get_bootparams', action="store_true", default=False)
     bss.add_argument('--xname', type=str)
