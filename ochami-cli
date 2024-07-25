@@ -458,7 +458,7 @@ def setArgs():
     subparser = parser.add_subparsers(dest='command')
 
     smd = subparser.add_parser('smd')
-    smd.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to SMD")
+    smd.add_argument('--payload', type=str, help="Path to YAML-formatted payload file to send to SMD")
     smd.add_argument('--add-node', dest='add_node', action="store_true", default=False)
     smd.add_argument('--delete-node', dest='delete_node', action="store_true", default=False)
     smd.add_argument('--add-interface', dest='add_interface', action="store_true", default=False)
@@ -476,7 +476,7 @@ def setArgs():
     smd.add_argument('--format', type=str, help="Output format; can be 'json' or 'yaml', anything else (default) uses a condensed yaml format")
     smd.add_argument('--dump', action="store_true", default=False)
     bss = subparser.add_parser('bss')
-    bss.add_argument('--config', type=str, help="Path to YAML-formatted payload to send to BSS")
+    bss.add_argument('--payload', type=str, help="Path to YAML-formatted payload file to send to BSS")
     bss.add_argument('--add-bootparams', dest='add_bootparams', action="store_true", default=False, help="Create boot parameters (must not already exist)")
     bss.add_argument('--update-bootparams', dest='update_bootparams', action="store_true", default=False, help="Set or update boot parameters for one or more hosts")
     bss.add_argument('--delete-bootparams', dest='delete_bootparams', action="store_true", default=False, help="Delete existing boot parameters")
@@ -550,9 +550,9 @@ def main():
         bss_url = os.getenv('BSS_URL')
 
     if args.command == "smd":
-        if args.config:
-            config = args.config
-            cdict = readConfig(config)
+        if args.payload:
+            payload = args.payload
+            cdict = readConfig(payload)
             for c in cdict['nodes']:
                 if args.fake_discovery:
                     print(c)
@@ -588,14 +588,14 @@ def main():
             dumpSMD(smd_url, headers, cacert)
 
     elif args.command == "bss":
-        if args.config:
-            config = args.config
-            bss_dict = readConfig(config)
+        if args.payload:
+            payload = args.payload
+            bss_dict = readConfig(payload)
 
         if args.add_bootparams:
             addBootParams(bss_url, headers, cacert, bss_dict)
         elif args.update_bootparams:
-            if args.config:
+            if args.payload:
                 updateBootParams(bss_url, headers, cacert, bss_dict)
             else:
                 if args.image or args.kernel or args.initrd or args.params:
@@ -624,4 +624,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# example usage: ./ochami-cli smd --config config.yml --url http://127.0.0.1:27779/hsm/v2
+# example usage: ./ochami-cli --smd-url https://foobar.openchami.cluster/hsm/v2 smd --payload payload.yml
