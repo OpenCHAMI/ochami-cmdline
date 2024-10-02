@@ -145,6 +145,16 @@ def redfishEndpointPayload(smd):
             }
     return sdata
 
+def groupsPayload(label, members):
+    gdata = {
+            "label": label,
+            "description": label + " nodes",
+            "members": {
+                "ids": members
+                }
+             }
+    return gdata
+
 def bssPayload(bss):
     bdata = {
                 'macs': bss['macs'],
@@ -229,6 +239,14 @@ def deleteEthernetInterface(smd_url, headers, cert, xname):
 def addRedfishEndpoint(smd_url, headers, cert, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
     makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, cert=cert, jdata=re)
+
+def addSMDGroup(smd_url, headers, cert, gname):
+    g = groupsPayload(gname, [])
+    makeRequest(url=smd_url+'/groups', r_type='post', headers=headers, cert=cert, jdata=g)
+    
+def addSMDGroupMember(smd_url, headers, cert, gname, member):
+    g = { "id": member }
+    makeRequest(url=smd_url+'/groups/'+gname+'/members', r_type='post', headers=headers, cert=cert, jdata=g)
 
 def getSMDComponents(smd_url, headers, cert, xname, nid):
     if not xname and not nid:
@@ -592,6 +610,7 @@ def main():
         if args.payload:
             payload = args.payload
             cdict = readConfig(payload)
+            existing_groups = []
             for c in cdict['nodes']:
                 if args.fake_discovery:
                     print(c)
@@ -607,6 +626,14 @@ def main():
                     addInterface(smd_url, headers, cacert, c['name'], c['xname'], c['mac'], c['ipaddr'])
                 except Exception as e:
                     print(e)
+                try:
+                    if c['group'] not in existing_groups:
+                        addSMDGroup(smd_url, headers, cacert, c['group'])
+                        existing_groups.append(c['group'])
+                    addSMDGroupMember(smd_url, headers, cacert, c['group'], c['xname'])
+                except Exception as e:
+                    print(e)
+
         elif args.add_node:
             addNode(smd_url, headers, cacert, args.xname, args.nid)
         elif args.delete_node:
@@ -640,7 +667,7 @@ def main():
                 if args.image or args.kernel or args.initrd or args.params:
                     setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
         elif args.patch_bootparams:
-            if args.config:
+            if args.payload:
                 patchBootParamsConfig(bss_url, headers, cacert, bss_dict)
             else:
                 if args.image or args.kernel or args.initrd or args.params:
