@@ -10,6 +10,7 @@ import urllib
 import uuid
 import base64
 import time
+import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from ClusterShell.NodeSet import NodeSet
@@ -91,14 +92,14 @@ def nodeComponentPayload(smd):
             }
     return sdata
 
-def ethernetInterfacePayload(smd):
+def ethernetInterfacePayload(smd, ntype):
     sdata = {
             "Description": "Interface for " + smd['name'],
             "MACAddress": smd['mac'],
             "IPAddresses": [
                 {
                     "IPAddress": smd['ipaddr'],
-                    "Network": "NMN"
+                    "Network": ntype
                     }
                 ],
             "ComponentID": smd['xname']
@@ -144,6 +145,16 @@ def redfishEndpointPayload(smd):
                 ]
             }
     return sdata
+
+def groupsPayload(label, members):
+    gdata = {
+            "label": label,
+            "description": label + " nodes",
+            "members": {
+                "ids": members
+                }
+             }
+    return gdata
 
 def bssPayload(bss):
     bdata = {
@@ -217,8 +228,8 @@ def addNode(smd_url, headers, cert, xname, nid):
 def deleteNode(smd_url, headers, cert, xname):
     makeRequest(url=smd_url+'/State/Components/'+xname, r_type='delete', headers=headers, cert=cert)
 
-def addInterface(smd_url, headers, cert, name, xname, mac, ipaddr):
-    ei = ethernetInterfacePayload({'name': name,'xname': xname,'mac': mac, 'ipaddr': ipaddr})
+def addInterface(smd_url, headers, cert, name, xname, mac, ipaddr, ntype):
+    ei = ethernetInterfacePayload({'name': name,'xname': xname,'mac': mac, 'ipaddr': ipaddr}, ntype)
     makeRequest(url=smd_url+'/Inventory/EthernetInterfaces', r_type='post', jdata=ei, headers=headers, cert=cert)
 
 def deleteEthernetInterface(smd_url, headers, cert, xname):
@@ -229,6 +240,14 @@ def deleteEthernetInterface(smd_url, headers, cert, xname):
 def addRedfishEndpoint(smd_url, headers, cert, name, xname, mac, bmc_ipaddr):
     re = redfishEndpointPayload({'name': name, 'xname': xname, 'mac': mac, 'bmc_ipaddr': bmc_ipaddr})
     makeRequest(url=smd_url+'/Inventory/RedfishEndpoints', r_type='post', headers=headers, cert=cert, jdata=re)
+
+def addSMDGroup(smd_url, headers, cert, gname):
+    g = groupsPayload(gname, [])
+    makeRequest(url=smd_url+'/groups', r_type='post', headers=headers, cert=cert, jdata=g)
+    
+def addSMDGroupMember(smd_url, headers, cert, gname, member):
+    g = { "id": member }
+    makeRequest(url=smd_url+'/groups/'+gname+'/members', r_type='post', headers=headers, cert=cert, jdata=g)
 
 def getSMDComponents(smd_url, headers, cert, xname, nid):
     if not xname and not nid:
@@ -422,6 +441,30 @@ def setBootParams(smd_url, bss_url, headers, cert, xname, nid, image, kernel, in
 
 ############# BSS #############
 
+############# Cloud Init ######
+def addCloudInitData(cloud_init_url, headers, cert, ci_dict):
+    r = makeRequest(url=cloud_init_url, r_type='post', jdata=ci_dict, headers=headers, cert=cert)
+    print(r)
+
+def delCloudInitData(cloud_init_url, headers, cert, ci_dict):
+    r = makeRequest(url=cloud_init_url+'/'+ci_dict['name'], r_type='delete', headers=headers, cert=cert)
+    print(r)
+
+def delCloudInitDataByName(cloud_init_url, headers, cert, name):
+    r = makeRequest(url=cloud_init_url+'/'+name, r_type='delete', headers=headers, cert=cert)
+    print(r)
+
+def getCloudInitData(cloud_init_url, headers, cert, name):
+    r = makeRequest(url=cloud_init_url+'/'+name, r_type='get', headers=headers, cert=cert)
+    return r
+
+def printCloudInitdata(ci_data, name):
+    ci_data['name'] = name
+    yaml_formatted_str = yaml.dump(ci_data, default_flow_style=False, width=4096)
+    print(yaml_formatted_str)
+
+############# Cloud Init ######
+
 ############# AUTH ############
 class AccessTokenHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -492,6 +535,8 @@ def setArgs():
     parser.add_argument("--ca-cert", dest="ca_cert", type=str, default="", help="set path for CA certificate")
     parser.add_argument('--smd-url', type=str)
     parser.add_argument('--bss-url', type=str)
+    parser.add_argument('--cloud-init-url', type=str)
+    parser.add_argument('--cloud-init-secure-url', type=str)
     parser.add_argument('--verbose', '-v', action='store_true')
     subparser = parser.add_subparsers(dest='command')
 
@@ -527,10 +572,21 @@ def setArgs():
     bss.add_argument('--initrd', type=str)
     bss.add_argument('--params', type=str)
     bss.add_argument('--format', type=str, help="Output format; can be 'json' or 'yaml', anything else (default) uses a condensed yaml format")
+
     login = subparser.add_parser('login')
     login.add_argument("--url", type=str, default="http://127.0.0.1:3333/login", help="set the login URL")
     login.add_argument("--target-host", dest='host', type=str, default="127.0.0.1", help="set the target host receive access token")
     login.add_argument("--target-port", dest='port', type=int, default=5000, help="set the target port receive access token")
+
+    cloud_init = subparser.add_parser('cloud-init')
+    cloud_init.add_argument('--payload', type=str, help="Path to YAML-formatted payload file to send to cloud-init")
+    cloud_init.add_argument('--add-ci-data', dest='add_ci_data', action="store_true", default=False, help="Add cloud-init data")
+    cloud_init.add_argument('--del-ci-data', dest='del_ci_data', action="store_true", default=False, help="Delete cloud-init data")
+    cloud_init.add_argument('--update-ci-data', dest='update_ci_data', action="store_true", default=False, help="Update cloud-init data")
+    cloud_init.add_argument('--get-ci-data', dest='get_ci_data', action="store_true", default=False, help="Get cloud-init data")
+    cloud_init.add_argument('--secure-ci', dest='secure_ci', action="store_true", default=False, help="Use secure endpoint")
+    cloud_init.add_argument('--name', type=str)
+
     args = parser.parse_args()
     return args
 
@@ -588,10 +644,21 @@ def main():
     elif os.getenv("BSS_URL"):
         bss_url = os.getenv('BSS_URL')
 
+    if args.cloud_init_url:
+        cloud_init_url = args.cloud_init_url
+    elif os.getenv("CLOUD_INIT_URL"):
+        cloud_init_url = os.getenv('CLOUD_INIT_URL')
+
+    if args.cloud_init_secure_url:
+        cloud_init_secure_url = args.cloud_init_secure_url
+    elif os.getenv("CLOUD_INIT_SECURE_URL"):
+        cloud_init_secure_url = os.getenv('CLOUD_INIT_SECURE_URL')
+
     if args.command == "smd":
         if args.payload:
             payload = args.payload
             cdict = readConfig(payload)
+            existing_groups = []
             for c in cdict['nodes']:
                 if args.fake_discovery:
                     print(c)
@@ -604,9 +671,27 @@ def main():
                 except Exception as e:
                     print(e)
                 try:
-                    addInterface(smd_url, headers, cacert, c['name'], c['xname'], c['mac'], c['ipaddr'])
+                    if 'ipaddr' in c:
+                        addInterface(smd_url, headers, cacert, c['name'], c['xname'], c['mac'], c['ipaddr'], ntype="NMN")
+                    if 'hsn_ipaddr' in c:
+                        if 'hsn_mac' not in c:
+                            # Generate Random MAC for HSN network. Getting this info is time consuming and not critical
+                            hsn_mac = "02:00:00:%02x:%02x:%02x" % (random.randint(0, 255),random.randint(0, 255),random.randint(0, 255))
+                        else:
+                            hsn_mac = c['hsn_mac']
+                        addInterface(smd_url, headers, cacert, c['name'], c['xname'], hsn_mac, c['hsn_ipaddr'], ntype="HSN")
+                    if 'external_ipaddr' and 'external_mac' in c:
+                        addInterface(smd_url, headers, cacert, c['name'], c['xname'], c['external_mac'], c['external_ipaddr'], ntype="External")
                 except Exception as e:
                     print(e)
+                try:
+                    if c['group'] not in existing_groups:
+                        addSMDGroup(smd_url, headers, cacert, c['group'])
+                        existing_groups.append(c['group'])
+                    addSMDGroupMember(smd_url, headers, cacert, c['group'], c['xname'])
+                except Exception as e:
+                    print(e)
+
         elif args.add_node:
             addNode(smd_url, headers, cacert, args.xname, args.nid)
         elif args.delete_node:
@@ -632,7 +717,12 @@ def main():
             bss_dict = readConfig(payload)
 
         if args.add_bootparams:
-            addBootParams(bss_url, headers, cacert, bss_dict)
+            if args.payload:
+                addBootParams(bss_url, headers, cacert, bss_dict)
+            else:
+                mac = getMacFromXname(smd_url, headers, cacert, args.xname)
+                addBootParams(bss_url, headers, cacert, {'macs': mac, 'kernel': args.kernel, 'initrd': args.initrd, 'params': args.params})
+
         elif args.update_bootparams:
             if args.payload:
                 updateBootParams(bss_url, headers, cacert, bss_dict)
@@ -640,7 +730,7 @@ def main():
                 if args.image or args.kernel or args.initrd or args.params:
                     setBootParams(smd_url, bss_url, headers, cacert, args.xname, args.nid, args.image, args.kernel, args.initrd, args.params)
         elif args.patch_bootparams:
-            if args.config:
+            if args.payload:
                 patchBootParamsConfig(bss_url, headers, cacert, bss_dict)
             else:
                 if args.image or args.kernel or args.initrd or args.params:
@@ -665,6 +755,38 @@ def main():
         else:
             print("found a valid token")
 
+    elif args.command == "cloud-init":
+        if args.secure_ci:
+            ci_url = cloud_init_secure_url
+        else:
+            ci_url = cloud_init_url
+
+        if args.name:
+            name = args.name
+        else:
+            name = None
+
+        if args.payload:
+            payload = args.payload
+            ci_dict = readConfig(payload)
+
+        if args.add_ci_data:
+            if not ci_dict:
+                sys.exit("Payload file is required when adding cloud-init data")
+            addCloudInitData(ci_url, headers, cacert, ci_dict)
+        elif args.del_ci_data:
+            delCloudInitDataByName(ci_url, headers, cacert, name)
+        elif args.update_ci_data:
+            if not ci_dict:
+                sys.exit("Payload is required when adding cloud-init data")
+            delCloudInitData(ci_url, headers, cacert, ci_dict)
+            addCloudInitData(ci_url, headers, cacert, ci_dict)
+        elif args.get_ci_data:
+            if name:
+                ci_data = getCloudInitData(ci_url, headers, cacert, name)
+                printCloudInitdata(ci_data, name)
+            else:
+                sys.exit("Name of cloud-init target is required when getting cloud-init data")
 
 if __name__ == "__main__":
     main()
