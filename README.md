@@ -1,9 +1,11 @@
 # OpenCHAMI Command-Line Utility
 
 ## Archived
-This tool is no longer updated or maintained.
+This tool is no longer updated or maintained. This tool is no longer guaranteed to work with OpenCHAMI resources. 
 The official OpenCHAMI command-line tool is [here](https://github.com/OpenCHAMI/ochami)
 
+
+## Description
 The `ochami-cli` tool provides a simple, and direct way to interact with OpenCHAMI services. It is capable of initiating logins for access tokens, managing nodes with SMD, and managing boot scripts/parameters with BSS. The tool is written and Python 3 and requires an interpreter to run.
 
 The tool comes with two other sub-commands `smd` and `bss` to interact with SMD and BSS respectively. 
